@@ -1,4 +1,4 @@
-# SplitDeploy: one Express process serves API + frontend dist/
+﻿# SplitDeploy: one Express process serves API + frontend dist/
 services:
   - type: web
     name: agencyos
@@ -6,27 +6,6 @@ services:
     plan: free
     region: singapore
     rootDir: .
-    buildCommand: npm install --prefix frontend && npm install --prefix backend && npm run build --prefix backend
+    buildCommand: npm install --prefix frontend --include=dev && npm install --prefix backend --include=dev && npm run build --prefix backend
     startCommand: npm start --prefix backend
     autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_NAME
-        sync: false
-      - key: CORS_ORIGIN
-        sync: false
-      - key: VAPID_PUBLIC_KEY
-        sync: false
-      - key: VAPID_PRIVATE_KEY
-        sync: false
-      - key: VAPID_SUBJECT
-        sync: false
