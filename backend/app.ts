@@ -14,6 +14,7 @@ import workersRoutes from './routes/workers.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import studentInvoicesRoutes from './routes/studentInvoices.routes.js';
 import studentsRoutes from './routes/students.routes.js';
+import helpChatRoutes from './routes/helpChat.routes.js';
 
 export function createApp() {
   const app = express();
@@ -43,6 +44,7 @@ export function createApp() {
   app.use('/api/fee-payments', feePaymentsRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/push', pushRoutes);
+  app.use('/api/help-chat', helpChatRoutes);
 
   app.use(errorHandler);
 

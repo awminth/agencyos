@@ -26,6 +26,16 @@ export async function create(req: Request, res: Response): Promise<void> {
   res.status(201).json(worker);
 }
 
+export async function importWorkers(req: Request, res: Response): Promise<void> {
+  const rows = Array.isArray(req.body?.workers)
+    ? req.body.workers
+    : Array.isArray(req.body)
+      ? req.body
+      : [];
+  const result = await workerService.importWorkers(rows);
+  res.status(201).json(result);
+}
+
 export async function update(req: Request, res: Response): Promise<void> {
   const worker = await workerService.updateWorker(req.params.id, req.body);
   res.json(worker);

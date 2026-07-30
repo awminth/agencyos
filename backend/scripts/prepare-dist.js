@@ -50,3 +50,4 @@ if (esbuild.status !== 0) {
 }
 
 console.log('[build] Done. Production: cd backend && npm start');
+console.log('[build] Keep backend/knowledge/ beside server.js for Help Chat.');

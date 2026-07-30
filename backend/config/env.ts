@@ -4,6 +4,7 @@ dotenv.config({ override: true, quiet: true });
 
 /** Required env: BACKEND_PORT, FRONTEND_PORT, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME */
 /** Optional Web Push: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto: or https URL) */
+/** Optional Help Chat: GEMINI_API_KEY (Google AI Studio) */
 export const env = {
   /** Render sets PORT; prefer it in production. */
   backendPort: Number(process.env.PORT || process.env.BACKEND_PORT) || 1012,
@@ -19,8 +20,15 @@ export const env = {
   vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
   /** Localhost-safe default; override in production with mailto:you@domain.com */
   vapidSubject: (process.env.VAPID_SUBJECT || 'mailto:agencyos@localhost').trim(),
+  geminiApiKey: (process.env.GEMINI_API_KEY || '').trim(),
+  /** Default matches contentplanner; override with GEMINI_MODEL if needed. */
+  geminiModel: (process.env.GEMINI_MODEL || 'gemini-3.5-flash').trim(),
 };
 
 export function isWebPushConfigured(): boolean {
   return Boolean(env.vapidPublicKey && env.vapidPrivateKey);
+}
+
+export function isGeminiConfigured(): boolean {
+  return Boolean(env.geminiApiKey);
 }

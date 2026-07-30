@@ -116,11 +116,17 @@ export async function showSuccess(title: string, text?: string): Promise<void> {
   });
 }
 
-export async function showWarning(title: string, text?: string): Promise<void> {
+export async function showWarning(
+  title: string,
+  text?: string,
+  options?: { html?: string }
+): Promise<void> {
   await fire('warning', {
     title,
-    text,
+    text: options?.html ? undefined : text,
+    html: options?.html,
     confirmButtonText: 'OK',
+    width: options?.html ? '36rem' : undefined,
   });
 }
 

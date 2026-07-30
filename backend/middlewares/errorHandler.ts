@@ -2,10 +2,13 @@ import type { NextFunction, Request, Response } from 'express';
 
 export class AppError extends Error {
   statusCode: number;
+  /** Optional per-row / field warnings (e.g. Excel import validation). */
+  warnings?: string[];
 
-  constructor(message: string, statusCode = 400) {
+  constructor(message: string, statusCode = 400, warnings?: string[]) {
     super(message);
     this.statusCode = statusCode;
+    this.warnings = warnings;
   }
 }
 
@@ -74,7 +77,10 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
+    res.status(err.statusCode).json({
+      error: err.message,
+      ...(err.warnings?.length ? { warnings: err.warnings } : {}),
+    });
     return;
   }
 

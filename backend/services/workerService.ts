@@ -1,6 +1,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../config/db.js';
 import { AppError } from '../middlewares/errorHandler.js';
+import { listVariables } from './settingsService.js';
 import type { Worker, WorkerStatus } from '../types/index.js';
 import { newId, num, toDateStr, toIso } from '../utils/helpers.js';
 
@@ -370,6 +371,343 @@ export async function deleteWorker(id: string): Promise<{ deletedInvoices: numbe
   } finally {
     conn.release();
   }
+}
+
+function normStr(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  return String(v).trim();
+}
+
+function matchSetting(value: string, allowed: Set<string>): boolean {
+  if (!value) return false;
+  if (allowed.has(value)) return true;
+  const lower = value.toLowerCase();
+  for (const a of allowed) {
+    if (a.toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
+function resolveSetting(value: string, allowed: Set<string>): string {
+  if (allowed.has(value)) return value;
+  const lower = value.toLowerCase();
+  for (const a of allowed) {
+    if (a.toLowerCase() === lower) return a;
+  }
+  return value;
+}
+
+/**
+ * Bulk-create workers in one transaction.
+ * Validates Visa / Supervising Org / Host Company / Job Category against active Settings.
+ * On any validation or DB error: no rows inserted (rollback) and warnings returned.
+ */
+export async function importWorkers(
+  rows: Array<Partial<Worker> & { _row?: number }>
+): Promise<{ imported: number; workers: Worker[] }> {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new AppError('Import လုပ်ရန် အချက်အလက် မရှိပါ။', 400);
+  }
+
+  const variables = await listVariables(undefined, true);
+  const visaSet = new Set(
+    variables.filter((v) => v.category === 'visa_type').map((v) => v.value)
+  );
+  const orgSet = new Set(
+    variables.filter((v) => v.category === 'supervising_org').map((v) => v.value)
+  );
+  const hostSet = new Set(
+    variables.filter((v) => v.category === 'host_company').map((v) => v.value)
+  );
+  const jobSet = new Set(
+    variables.filter((v) => v.category === 'job_category').map((v) => v.value)
+  );
+
+  const warnings: string[] = [];
+  const seenSerial = new Map<string, number>();
+  const seenPassport = new Map<string, number>();
+
+  const normalized: Array<{
+    rowNum: number;
+    body: Partial<Worker>;
+  }> = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i];
+    const rowNum = typeof raw._row === 'number' && raw._row > 0 ? raw._row : i + 2;
+    const name = normStr(raw.name);
+    const passportNo = normStr(raw.passportNo);
+    const genderRaw = normStr(raw.gender);
+    const statusRaw = normStr(raw.status) || 'Active';
+    const dep = raw.deployment || ({} as Worker['deployment']);
+    const visaType = normStr(dep.visaType);
+    const supervisingOrg = normStr(dep.supervisingOrg);
+    const hostCompany = normStr(dep.hostCompany);
+    const jobCategory = normStr(dep.jobCategory);
+    const serialNo = normStr(raw.serialNo);
+    const currencyRaw = normStr(raw.financialConfig?.currency) || 'JPY';
+
+    if (!name) warnings.push(`Row ${rowNum}: အမည် (Name) မရှိပါ`);
+    if (!passportNo) warnings.push(`Row ${rowNum}: Passport နံပါတ် မရှိပါ`);
+
+    if (genderRaw && genderRaw !== 'Male' && genderRaw !== 'Female') {
+      warnings.push(`Row ${rowNum}: Gender သည် Male သို့မဟုတ် Female ဖြစ်ရမည် ("${genderRaw}")`);
+    }
+
+    const validStatuses: WorkerStatus[] = ['Active', 'Contract Ended', 'Absconded'];
+    if (!validStatuses.includes(statusRaw as WorkerStatus)) {
+      warnings.push(
+        `Row ${rowNum}: Status မှားနေပါသည် ("${statusRaw}") — Active / Contract Ended / Absconded`
+      );
+    }
+
+    if (!visaType) {
+      warnings.push(`Row ${rowNum}: Visa Type မရှိပါ`);
+    } else if (!matchSetting(visaType, visaSet)) {
+      warnings.push(
+        `Row ${rowNum}: Visa Type "${visaType}" သည် Settings တွင် မရှိပါ (သို့မဟုတ် inactive)`
+      );
+    }
+
+    if (!supervisingOrg) {
+      warnings.push(`Row ${rowNum}: Supervising Org မရှိပါ`);
+    } else if (!matchSetting(supervisingOrg, orgSet)) {
+      warnings.push(
+        `Row ${rowNum}: Supervising Org "${supervisingOrg}" သည် Settings တွင် မရှိပါ (သို့မဟုတ် inactive)`
+      );
+    }
+
+    if (!hostCompany) {
+      warnings.push(`Row ${rowNum}: Host Company မရှိပါ`);
+    } else if (!matchSetting(hostCompany, hostSet)) {
+      warnings.push(
+        `Row ${rowNum}: Host Company "${hostCompany}" သည် Settings တွင် မရှိပါ (သို့မဟုတ် inactive)`
+      );
+    }
+
+    if (!jobCategory) {
+      warnings.push(`Row ${rowNum}: Job Category မရှိပါ`);
+    } else if (!matchSetting(jobCategory, jobSet)) {
+      warnings.push(
+        `Row ${rowNum}: Job Category "${jobCategory}" သည် Settings တွင် မရှိပါ (သို့မဟုတ် inactive)`
+      );
+    }
+
+    if (currencyRaw !== 'JPY' && currencyRaw !== 'MMK' && currencyRaw !== 'USD') {
+      warnings.push(`Row ${rowNum}: Currency မှားနေပါသည် ("${currencyRaw}") — JPY / MMK / USD`);
+    }
+
+    if (serialNo) {
+      const key = serialNo.toLowerCase();
+      if (seenSerial.has(key)) {
+        warnings.push(
+          `Row ${rowNum}: Serial No "${serialNo}" သည် Row ${seenSerial.get(key)} နှင့် ထပ်နေပါသည်`
+        );
+      } else {
+        seenSerial.set(key, rowNum);
+      }
+    }
+
+    if (passportNo) {
+      const key = passportNo.toLowerCase();
+      if (seenPassport.has(key)) {
+        warnings.push(
+          `Row ${rowNum}: Passport "${passportNo}" သည် Row ${seenPassport.get(key)} နှင့် ထပ်နေပါသည်`
+        );
+      } else {
+        seenPassport.set(key, rowNum);
+      }
+    }
+
+    normalized.push({
+      rowNum,
+      body: {
+        serialNo: serialNo || undefined,
+        name,
+        gender: genderRaw === 'Female' ? 'Female' : 'Male',
+        dob: normStr(raw.dob) || '2000-01-01',
+        passportNo,
+        status: (validStatuses.includes(statusRaw as WorkerStatus)
+          ? statusRaw
+          : 'Active') as WorkerStatus,
+        abscondedDate: normStr(raw.abscondedDate) || undefined,
+        notes: normStr(raw.notes),
+        deployment: {
+          visaType: resolveSetting(visaType, visaSet),
+          supervisingOrg: resolveSetting(supervisingOrg, orgSet),
+          hostCompany: resolveSetting(hostCompany, hostSet),
+          jobCategory: resolveSetting(jobCategory, jobSet),
+          ownCardDate: normStr(dep.ownCardDate),
+          departureDate: normStr(dep.departureDate),
+          japanEntryDate: normStr(dep.japanEntryDate),
+          contractEndDate: normStr(dep.contractEndDate),
+        },
+        financialConfig: {
+          flightFee: num(raw.financialConfig?.flightFee, 150000),
+          trainingFee: num(raw.financialConfig?.trainingFee, 250000),
+          managementFee: num(raw.financialConfig?.managementFee, 30000),
+          billingCycleMonths: num(raw.financialConfig?.billingCycleMonths, 6),
+          currency: (currencyRaw === 'MMK' || currencyRaw === 'USD' ? currencyRaw : 'JPY') as
+            | 'JPY'
+            | 'MMK'
+            | 'USD',
+        },
+      },
+    });
+  }
+
+  // Check existing serial / passport conflicts before insert
+  const serials = normalized.map((n) => n.body.serialNo).filter(Boolean) as string[];
+  const passports = normalized.map((n) => n.body.passportNo).filter(Boolean) as string[];
+
+  if (serials.length) {
+    const placeholders = serials.map((_, i) => `:s${i}`).join(',');
+    const params: Record<string, string> = {};
+    serials.forEach((s, i) => {
+      params[`s${i}`] = s;
+    });
+    const [existing] = await pool.query<RowDataPacket[]>(
+      `SELECT serial_no FROM workers WHERE serial_no IN (${placeholders})`,
+      params
+    );
+    const existingSet = new Set(existing.map((r) => String(r.serial_no).toLowerCase()));
+    for (const n of normalized) {
+      if (n.body.serialNo && existingSet.has(n.body.serialNo.toLowerCase())) {
+        warnings.push(
+          `Row ${n.rowNum}: Serial No "${n.body.serialNo}" သည် စနစ်ထဲတွင် ရှိပြီးသား ဖြစ်နေပါသည်`
+        );
+      }
+    }
+  }
+
+  if (passports.length) {
+    const placeholders = passports.map((_, i) => `:p${i}`).join(',');
+    const params: Record<string, string> = {};
+    passports.forEach((p, i) => {
+      params[`p${i}`] = p;
+    });
+    const [existing] = await pool.query<RowDataPacket[]>(
+      `SELECT passport_no FROM workers WHERE passport_no IN (${placeholders})`,
+      params
+    );
+    const existingSet = new Set(existing.map((r) => String(r.passport_no).toLowerCase()));
+    for (const n of normalized) {
+      if (n.body.passportNo && existingSet.has(n.body.passportNo.toLowerCase())) {
+        warnings.push(
+          `Row ${n.rowNum}: Passport "${n.body.passportNo}" သည် စနစ်ထဲတွင် ရှိပြီးသား ဖြစ်နေပါသည်`
+        );
+      }
+    }
+  }
+
+  if (warnings.length) {
+    throw new AppError(
+      'Excel Import မအောင်မြင်ပါ — Settings နှင့် မကိုက်ညီသော (သို့) မပြည့်စုံသော အချက်အလက်များ ရှိနေသောကြောင့် data insert မလုပ်ဘဲ rollback လုပ်ထားပါသည်။',
+      400,
+      warnings
+    );
+  }
+
+  const year = new Date().getFullYear();
+  const conn = await pool.getConnection();
+  const createdIds: string[] = [];
+
+  try {
+    await conn.beginTransaction();
+
+    const [countRows] = await conn.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS c FROM workers WHERE serial_no LIKE :prefix',
+      { prefix: `W-${year}-%` }
+    );
+    let nextSeq = Number(countRows[0].c) + 1;
+
+    for (const n of normalized) {
+      const id = newId('w');
+      const depId = newId('dep');
+      const finId = newId('fin');
+      const body = n.body;
+      const serialNo =
+        body.serialNo || `W-${year}-${String(nextSeq).padStart(3, '0')}`;
+      if (!body.serialNo) nextSeq += 1;
+
+      const status = (body.status || 'Active') as WorkerStatus;
+      const abscondedDate =
+        status === 'Absconded'
+          ? body.abscondedDate || new Date().toISOString().split('T')[0]
+          : null;
+
+      await conn.execute<ResultSetHeader>(
+        `INSERT INTO workers
+          (id, serial_no, name, gender, dob, passport_no, status, absconded_date, notes)
+         VALUES (:id, :serialNo, :name, :gender, :dob, :passportNo, :status, :abscondedDate, :notes)`,
+        {
+          id,
+          serialNo,
+          name: body.name || '',
+          gender: body.gender || 'Male',
+          dob: body.dob || '2000-01-01',
+          passportNo: body.passportNo || '',
+          status,
+          abscondedDate,
+          notes: body.notes || '',
+        }
+      );
+
+      const dep = body.deployment!;
+      await conn.execute(
+        `INSERT INTO deployments
+          (id, worker_id, visa_type, supervising_org, host_company, job_category,
+           own_card_date, departure_date, japan_entry_date, contract_end_date)
+         VALUES (:id, :workerId, :visaType, :supervisingOrg, :hostCompany, :jobCategory,
+           NULLIF(:ownCardDate, ''), NULLIF(:departureDate, ''), NULLIF(:japanEntryDate, ''), NULLIF(:contractEndDate, ''))`,
+        {
+          id: depId,
+          workerId: id,
+          visaType: dep.visaType,
+          supervisingOrg: dep.supervisingOrg,
+          hostCompany: dep.hostCompany,
+          jobCategory: dep.jobCategory,
+          ownCardDate: dep.ownCardDate || '',
+          departureDate: dep.departureDate || '',
+          japanEntryDate: dep.japanEntryDate || '',
+          contractEndDate: dep.contractEndDate || '',
+        }
+      );
+
+      const fin = body.financialConfig!;
+      await conn.execute(
+        `INSERT INTO financial_configs
+          (id, worker_id, flight_fee, training_fee, management_fee, billing_cycle_months, currency)
+         VALUES (:id, :workerId, :flightFee, :trainingFee, :managementFee, :billingCycleMonths, :currency)`,
+        {
+          id: finId,
+          workerId: id,
+          flightFee: num(fin.flightFee, 150000),
+          trainingFee: num(fin.trainingFee, 250000),
+          managementFee: num(fin.managementFee, 30000),
+          billingCycleMonths: num(fin.billingCycleMonths, 6),
+          currency: fin.currency || 'JPY',
+        }
+      );
+
+      createdIds.push(id);
+    }
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  const workers: Worker[] = [];
+  for (const id of createdIds) {
+    const w = await getWorkerById(id);
+    if (w) workers.push(w);
+  }
+
+  return { imported: workers.length, workers };
 }
 
 /** Ensure financial_configs.currency exists for older DBs. */

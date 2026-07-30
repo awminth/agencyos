@@ -28,6 +28,7 @@ import { WorkerFormPage } from './components/WorkerFormPage';
 import { InvoiceFormPage } from './components/InvoiceFormPage';
 import { WorkerFeeDetailPage } from './components/WorkerFeeDetailModal';
 import { PrintableInvoiceModal } from './components/PrintableInvoiceModal';
+import { HelpChat } from './components/HelpChat';
 import { WorkerDetailModal } from './components/WorkerDetailModal';
 import { LoginPage } from './components/LoginPage';
 import { BottomNav } from './components/BottomNav';
@@ -885,6 +886,7 @@ export default function App() {
                   onDeleteWorker={handleDeleteWorker}
                   onStatusChange={handleWorkerStatusChange}
                   onSelectWorkerDetail={(worker) => setSelectedDetailWorker(worker)}
+                  onImportComplete={refreshAllData}
                 />
               )}
 
@@ -1056,6 +1058,8 @@ export default function App() {
           }}
         />
       )}
+
+      <HelpChat userId={currentUser.id} />
     </div>
   );
 }

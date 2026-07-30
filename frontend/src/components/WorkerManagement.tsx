@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Worker, WorkerStatus, AuthUser } from '../types';
 import {
   Search,
@@ -9,14 +9,22 @@ import {
   Edit,
   Trash2,
   Eye,
+  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { TablePagination, usePagination } from './TablePagination';
 import { ExportButtons } from './ExportButtons';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import {
+  downloadWorkerImportTemplate,
+  parseWorkerExcelFile,
+} from '../utils/workerExcel';
 import { can } from '../utils/permissions';
 import { MobileFilterToggle } from './MobileFilterToggle';
 import { MobileMeta } from './MobileMeta';
+import { ApiError, parseApiResponse } from '../utils/api';
+import { showSuccess, showWarning } from '../utils/swal';
 
 interface WorkerManagementProps {
   workers: Worker[];
@@ -27,6 +35,7 @@ interface WorkerManagementProps {
   onDeleteWorker: (id: string) => void;
   onStatusChange: (worker: Worker, newStatus: WorkerStatus) => void;
   onSelectWorkerDetail: (worker: Worker) => void;
+  onImportComplete?: () => void | Promise<void>;
 }
 
 function daysUntil(dateStr?: string): number | null {
@@ -56,6 +65,7 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
   onDeleteWorker,
   onStatusChange,
   onSelectWorkerDetail,
+  onImportComplete,
 }) => {
   const { t } = useLanguage();
   const module = viewMode === 'deployments' ? 'deployments' : 'workers';
@@ -69,6 +79,8 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
   const [visaFilter, setVisaFilter] = useState<string>('ALL');
   const [expiryFilter, setExpiryFilter] = useState<string>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [abscondedModalWorker, setAbscondedModalWorker] = useState<Worker | null>(null);
   const [abscondedDateInput, setAbscondedDateInput] = useState<string>(
@@ -210,6 +222,69 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
     exportToPDF(pageTitle, headers, rows, { subtitle: pageSubtitle });
   };
 
+  const escapeHtml = (value: string) =>
+    value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/settings/variables?activeOnly=1');
+      const rows = await parseApiResponse<{ category: string; value: string }[]>(res);
+      downloadWorkerImportTemplate(Array.isArray(rows) ? rows : [], { includeSample: true });
+    } catch (err) {
+      console.error(err);
+      await showWarning(
+        t('workers.importFailTitle'),
+        err instanceof Error ? err.message : 'Template ထုတ်၍ မရပါ'
+      );
+    }
+  };
+
+  const handleImportFile = async (file: File | null) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workersPayload = parseWorkerExcelFile(buffer);
+      const res = await fetch('/api/workers/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workers: workersPayload }),
+      });
+      const result = await parseApiResponse<{ imported: number }>(res);
+      await onImportComplete?.();
+      await showSuccess(t('workers.importSuccess', { count: result.imported }));
+    } catch (err) {
+      console.error(err);
+      const warnings = err instanceof ApiError ? err.warnings : undefined;
+      if (warnings?.length) {
+        const list = warnings
+          .slice(0, 40)
+          .map((w) => `<li class="text-left text-sm">${escapeHtml(w)}</li>`)
+          .join('');
+        const more =
+          warnings.length > 40
+            ? `<p class="mt-2 text-xs text-slate-500">… +${warnings.length - 40} more</p>`
+            : '';
+        await showWarning(t('workers.importFailTitle'), undefined, {
+          html: `<p class="agency-swal__msg mb-2">${escapeHtml(t('workers.importFailHint'))}</p>
+            <ul class="max-h-64 list-disc space-y-1 overflow-y-auto pl-5 text-left">${list}</ul>${more}`,
+        });
+      } else {
+        await showWarning(
+          t('workers.importFailTitle'),
+          err instanceof Error ? err.message : 'Import မအောင်မြင်ပါ'
+        );
+      }
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   const activeFilterCount =
     (statusFilter !== 'ALL' ? 1 : 0) +
     (searchTerm.trim() ? 1 : 0) +
@@ -292,13 +367,43 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <ExportButtons onExcel={handleExcel} onPdf={handlePdf} />
             {!isDeployments && canCreate && (
-              <button
-                onClick={onOpenAddModal}
-                className="flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-blue-500 sm:text-sm"
-              >
-                <Plus className="h-4 w-4" />
-                <span>{t('workers.add')}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadTemplate()}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 shadow-xs transition-all hover:bg-emerald-100 sm:text-sm"
+                  title={t('workers.template')}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('workers.template')}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={() => importInputRef.current?.click()}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-xs transition-all hover:bg-amber-100 disabled:opacity-60 sm:text-sm"
+                  title={t('workers.import')}
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {importing ? t('workers.importing') : t('workers.import')}
+                  </span>
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  className="hidden"
+                  onChange={(e) => void handleImportFile(e.target.files?.[0] || null)}
+                />
+                <button
+                  onClick={onOpenAddModal}
+                  className="flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-blue-500 sm:text-sm"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{t('workers.add')}</span>
+                </button>
+              </>
             )}
           </div>
         </div>
