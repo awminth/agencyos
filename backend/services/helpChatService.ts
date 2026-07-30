@@ -1,12 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { GoogleGenAI } from '@google/genai';
+import { pool } from '../config/db.js';
 import { env, isGeminiConfigured } from '../config/env.js';
 import { AppError } from '../middlewares/errorHandler.js';
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY_TURNS = 8;
+export const HELP_CHAT_DAILY_LIMIT = 30;
 
 export type HelpChatRole = 'user' | 'model';
 
@@ -15,7 +18,96 @@ export interface HelpChatTurn {
   text: string;
 }
 
+export interface HelpChatQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+}
+
 let cachedKnowledge: string | null = null;
+let usageTableReady = false;
+
+/** Calendar date in Asia/Yangon (YYYY-MM-DD). */
+export function myanmarDateStr(d = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Yangon',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+export async function ensureHelpChatUsageTable(): Promise<void> {
+  if (usageTableReady) return;
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS help_chat_daily_usage (
+      user_id VARCHAR(64) NOT NULL,
+      usage_date DATE NOT NULL,
+      request_count INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, usage_date)
+    )
+  `);
+  usageTableReady = true;
+}
+
+export async function getHelpChatQuota(userId: string): Promise<HelpChatQuota> {
+  await ensureHelpChatUsageTable();
+  const usageDate = myanmarDateStr();
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT request_count FROM help_chat_daily_usage
+     WHERE user_id = :userId AND usage_date = :usageDate
+     LIMIT 1`,
+    { userId, usageDate }
+  );
+  const used = Number(rows[0]?.request_count || 0);
+  return {
+    limit: HELP_CHAT_DAILY_LIMIT,
+    used,
+    remaining: Math.max(0, HELP_CHAT_DAILY_LIMIT - used),
+  };
+}
+
+/** Atomically consume one daily slot. Throws 429 when limit reached. */
+async function consumeHelpChatQuota(userId: string): Promise<HelpChatQuota> {
+  await ensureHelpChatUsageTable();
+  const usageDate = myanmarDateStr();
+
+  const [updateResult] = await pool.execute<ResultSetHeader>(
+    `UPDATE help_chat_daily_usage
+     SET request_count = request_count + 1
+     WHERE user_id = :userId
+       AND usage_date = :usageDate
+       AND request_count < :limit`,
+    { userId, usageDate, limit: HELP_CHAT_DAILY_LIMIT }
+  );
+
+  if (updateResult.affectedRows === 1) {
+    return getHelpChatQuota(userId);
+  }
+
+  try {
+    await pool.execute(
+      `INSERT INTO help_chat_daily_usage (user_id, usage_date, request_count)
+       VALUES (:userId, :usageDate, 1)`,
+      { userId, usageDate }
+    );
+    return {
+      limit: HELP_CHAT_DAILY_LIMIT,
+      used: 1,
+      remaining: HELP_CHAT_DAILY_LIMIT - 1,
+    };
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'ER_DUP_ENTRY') {
+      throw new AppError(
+        `ယနေ့အတွက် မေးခွန်းအကြိမ် (${HELP_CHAT_DAILY_LIMIT}) ကုန်ဆုံးပါပြီ။ မနက်ဖြန် ပြန်မေးနိုင်ပါသည်။`,
+        429
+      );
+    }
+    throw err;
+  }
+}
 
 function resolveKnowledgePath(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -69,9 +161,10 @@ function normalizeHistory(history: unknown): HelpChatTurn[] {
 }
 
 export async function askHelpChat(input: {
+  userId: string;
   message: unknown;
   history?: unknown;
-}): Promise<{ reply: string }> {
+}): Promise<{ reply: string } & HelpChatQuota> {
   if (!isGeminiConfigured()) {
     throw new AppError(
       'Help Chat မရနိုင်သေးပါ။ backend/.env တွင် GEMINI_API_KEY ထည့်ပါ။',
@@ -86,6 +179,8 @@ export async function askHelpChat(input: {
   if (message.length > MAX_MESSAGE_CHARS) {
     throw new AppError(`မေးခွန်း အလွန်ရှည်ပါသည် (အများဆုံး ${MAX_MESSAGE_CHARS} လုံး)။`, 400);
   }
+
+  const quota = await consumeHelpChatQuota(input.userId);
 
   const knowledge = loadKnowledge();
   const history = normalizeHistory(input.history);
@@ -115,7 +210,7 @@ export async function askHelpChat(input: {
       throw new AppError('အဖြေ မရရှိပါ။ ခဏနေပြီး ပြန်မေးပါ။', 502);
     }
 
-    return { reply };
+    return { reply, ...quota };
   } catch (err) {
     if (err instanceof AppError) throw err;
     const msg = err instanceof Error ? err.message : String(err);

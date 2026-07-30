@@ -8,6 +8,7 @@ const router = Router();
 router.use(attachUser);
 router.use(requireAuth);
 
+router.get('/quota', asyncHandler(helpChatController.quota));
 router.post('/', asyncHandler(helpChatController.chat));
 
 export default router;

@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
-import { postHelpChat, type HelpChatTurn } from '../utils/api';
+import {
+  getHelpChatQuota,
+  postHelpChat,
+  type HelpChatQuota,
+  type HelpChatTurn,
+} from '../utils/api';
 
 interface HelpChatProps {
   userId: string;
@@ -12,12 +17,13 @@ interface UiMessage {
 }
 
 const WELCOME =
-  'မင်္ဂလာပါ။ AgencyMS အသုံးပြုနည်းကို မြန်မာလို မေးနိုင်ပါသည်။ ဥပမာ — အလုပ်သမား Excel ဘယ်မှာ တင်ရမလဲ။';
+  'မင်္ဂလာပါ။ AgencyMS အသုံးပြုနည်းကို မြန်မာလို မေးနိုင်ပါသည်။ တစ်ရက်လျှင် အကြိမ် ၃၀ အထိ မေးနိုင်ပါသည်။';
 
 export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [quota, setQuota] = useState<HelpChatQuota | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([
     { role: 'model', text: WELCOME },
   ]);
@@ -26,14 +32,24 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
 
   useEffect(() => {
     if (!open) return;
+    void getHelpChatQuota(userId)
+      .then(setQuota)
+      .catch(() => setQuota(null));
+  }, [open, userId]);
+
+  useEffect(() => {
+    if (!open) return;
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
     inputRef.current?.focus();
   }, [open, messages, sending]);
 
+  const remaining = quota?.remaining ?? null;
+  const atLimit = remaining !== null && remaining <= 0;
+
   const send = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || atLimit) return;
 
     setInput('');
     setMessages((prev) => [...prev, { role: 'user', text }]);
@@ -42,15 +58,23 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
     try {
       const history: HelpChatTurn[] = messages
         .filter((m) => m.role === 'user' || m.role === 'model')
-        .slice(1) // skip welcome
+        .slice(1)
         .map((m) => ({ role: m.role, text: m.text }));
 
-      const { reply } = await postHelpChat(userId, text, history);
-      setMessages((prev) => [...prev, { role: 'model', text: reply }]);
+      const result = await postHelpChat(userId, text, history);
+      setQuota({
+        limit: result.limit,
+        used: result.used,
+        remaining: result.remaining,
+      });
+      setMessages((prev) => [...prev, { role: 'model', text: result.reply }]);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : 'မေးခွန်း ပို့၍ မရပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။';
       setMessages((prev) => [...prev, { role: 'model', text: msg }]);
+      void getHelpChatQuota(userId)
+        .then(setQuota)
+        .catch(() => undefined);
     } finally {
       setSending(false);
     }
@@ -75,7 +99,9 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
                 အကူအညီ (မြန်မာ)
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                AgencyMS အသုံးပြုနည်းသာ
+                {quota
+                  ? `ယနေ့ ကျန် ${quota.remaining} / ${quota.limit}`
+                  : 'AgencyMS အသုံးပြုနည်းသာ'}
               </p>
             </div>
             <button
@@ -114,7 +140,9 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
 
           <div className="border-t border-slate-200 p-3 dark:border-slate-700">
             <p className="mb-2 text-[11px] text-slate-500 dark:text-slate-400">
-              မြန်မာလိုသာ မေးပါ။
+              {atLimit
+                ? 'ယနေ့ အကြိမ်ကုန်ပါပြီ။ မနက်ဖြန် ပြန်မေးနိုင်ပါသည်။'
+                : 'မြန်မာလိုသာ မေးပါ။ တစ်ရက် ၃၀ ကြိမ်။'}
             </p>
             <div className="flex items-end gap-2">
               <textarea
@@ -128,14 +156,14 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
                   }
                 }}
                 rows={2}
-                placeholder="မေးခွန်း ရေးပါ…"
-                disabled={sending}
+                placeholder={atLimit ? 'ယနေ့ အကြိမ်ကုန်ပါပြီ' : 'မေးခွန်း ရေးပါ…'}
+                disabled={sending || atLimit}
                 className="min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
               />
               <button
                 type="button"
                 onClick={() => void send()}
-                disabled={sending || !input.trim()}
+                disabled={sending || atLimit || !input.trim()}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="ပို့ရန်"
               >

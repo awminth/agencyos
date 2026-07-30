@@ -11,6 +11,7 @@ import {
   dispatchAlertPushes,
   ensurePushSubscriptionsTable,
 } from './services/pushService.js';
+import { ensureHelpChatUsageTable } from './services/helpChatService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,7 @@ async function start() {
     await ensurePermissionsColumn();
     await ensureFinancialConfigCurrency();
     await ensurePushSubscriptionsTable();
+    await ensureHelpChatUsageTable();
   } catch (err) {
     console.error('MySQL connection failed. Check DB_* in .env and run: npm run init-db');
     console.error(err);
