@@ -103,6 +103,21 @@ async function main() {
 
   try {
     await root.query(
+      `ALTER TABLE system_variables
+       MODIFY category ENUM(
+         'visa_type',
+         'supervising_org',
+         'host_company',
+         'job_category',
+         'school_name'
+       ) NOT NULL`
+    );
+  } catch (err: any) {
+    console.warn('system_variables.school_name migrate skipped:', err?.code || err?.message);
+  }
+
+  try {
+    await root.query(
       `CREATE TABLE IF NOT EXISTS currency_settings (
         id TINYINT PRIMARY KEY DEFAULT 1,
         jpy_to_mmk_rate DECIMAL(18, 6) NOT NULL DEFAULT 20,
@@ -219,7 +234,8 @@ async function main() {
       `CREATE TABLE IF NOT EXISTS student_invoices (
         id VARCHAR(64) PRIMARY KEY,
         invoice_no VARCHAR(30) NOT NULL UNIQUE,
-        student_id VARCHAR(64) NOT NULL,
+        student_id VARCHAR(64) NULL,
+        school_name VARCHAR(150) NULL,
         fee_type ENUM('introduction') NOT NULL DEFAULT 'introduction',
         billing_period VARCHAR(50) NOT NULL,
         last_invoice_date DATE NOT NULL,
@@ -234,7 +250,18 @@ async function main() {
         currency ENUM('JPY', 'MMK', 'USD') NOT NULL DEFAULT 'JPY',
         notes TEXT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+      )`
+    );
+    await root.query(
+      `CREATE TABLE IF NOT EXISTS student_invoice_lines (
+        id VARCHAR(64) PRIMARY KEY,
+        invoice_id VARCHAR(64) NOT NULL,
+        student_id VARCHAR(64) NOT NULL,
+        amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        UNIQUE KEY uq_student_invoice_line (invoice_id, student_id),
+        KEY idx_student_invoice_lines_invoice (invoice_id),
+        KEY idx_student_invoice_lines_student (student_id)
       )`
     );
     await root.query(
@@ -259,9 +286,11 @@ async function main() {
     'CREATE INDEX idx_students_status ON students(status)',
     'CREATE INDEX idx_student_deployments_contract ON student_deployments(contract_end_date)',
     'CREATE INDEX idx_student_invoices_student ON student_invoices(student_id)',
+    'CREATE INDEX idx_student_invoices_school ON student_invoices(school_name)',
     'CREATE INDEX idx_student_invoices_next_date ON student_invoices(next_invoice_date)',
     'CREATE INDEX idx_student_invoices_status ON student_invoices(status)',
     'CREATE INDEX idx_student_invoice_payments_invoice ON student_invoice_payments(invoice_id)',
+    'CREATE INDEX idx_student_invoice_lines_invoice ON student_invoice_lines(invoice_id)',
   ]) {
     try {
       await root.query(stmt);
@@ -354,44 +383,138 @@ async function seedPrintAndVariables(conn: mysql.Connection) {
   }
 
   const [varRows] = await conn.query<any[]>('SELECT COUNT(*) AS c FROM system_variables');
-  if (Number(varRows[0].c) > 0) {
+  if (Number(varRows[0].c) === 0) {
+    console.log('Seeding system variables…');
+    const vars: Array<[string, string, string, number]> = [
+      ['var-visa-1', 'visa_type', 'TITP-1', 1],
+      ['var-visa-2', 'visa_type', 'TITP-2', 2],
+      ['var-visa-3', 'visa_type', 'TITP-3', 3],
+      ['var-visa-4', 'visa_type', 'SSW-Caregiver', 4],
+      ['var-visa-5', 'visa_type', 'SSW-Construction', 5],
+      ['var-visa-6', 'visa_type', 'SSW-Food Processing', 6],
+      ['var-visa-7', 'visa_type', 'SSW-Agriculture', 7],
+      ['var-visa-8', 'visa_type', 'SSW-Manufacturing', 8],
+      ['var-visa-9', 'visa_type', 'Engineering/Humanities', 9],
+      ['var-org-1', 'supervising_org', 'Japan Skill Cooperative (JSC)', 1],
+      ['var-org-2', 'supervising_org', 'Kanto Caregiver Support Org', 2],
+      ['var-org-3', 'supervising_org', 'OTIT International Union', 3],
+      ['var-org-4', 'supervising_org', 'Chubu Textile Association', 4],
+      ['var-host-1', 'host_company', 'Tanaka Precision Machinery Co., Ltd.', 1],
+      ['var-host-2', 'host_company', 'Fuji Elderly Care Center Osaka', 2],
+      ['var-host-3', 'host_company', 'Yamada Construction Group', 3],
+      ['var-host-4', 'host_company', 'Nagoya Garment & Apparel Ltd.', 4],
+      ['var-host-5', 'host_company', 'Saitama Bento & Delica Inc.', 5],
+      ['var-host-6', 'host_company', 'Kyoto Auto Parts Co., Ltd.', 6],
+      ['var-host-7', 'host_company', 'Hokkaido Dairy Farm Association', 7],
+      ['var-host-8', 'host_company', 'Yokohama Logistics Hub K.K.', 8],
+      ['var-job-1', 'job_category', 'Machining & Metal Works', 1],
+      ['var-job-2', 'job_category', 'Caregiver / Nursing Care', 2],
+      ['var-job-3', 'job_category', 'Scaffolding & Building Works', 3],
+      ['var-job-4', 'job_category', 'Textile Manufacturing', 4],
+      ['var-job-5', 'job_category', 'Food & Beverage Production', 5],
+      ['var-school-1', 'school_name', 'Tokyo Japanese Language Academy', 1],
+      ['var-school-2', 'school_name', 'Osaka International College', 2],
+      ['var-school-3', 'school_name', 'Nagoya Career School', 3],
+      ['var-school-4', 'school_name', 'Fukuoka Study Abroad Center', 4],
+    ];
+
+    const hostParent: Record<string, string> = {
+      'Tanaka Precision Machinery Co., Ltd.': 'Japan Skill Cooperative (JSC)',
+      'Fuji Elderly Care Center Osaka': 'Kanto Caregiver Support Org',
+      'Yamada Construction Group': 'OTIT International Union',
+      'Nagoya Garment & Apparel Ltd.': 'Chubu Textile Association',
+      'Saitama Bento & Delica Inc.': 'Japan Skill Cooperative (JSC)',
+      'Kyoto Auto Parts Co., Ltd.': 'Japan Skill Cooperative (JSC)',
+      'Hokkaido Dairy Farm Association': 'OTIT International Union',
+      'Yokohama Logistics Hub K.K.': 'Japan Skill Cooperative (JSC)',
+    };
+
+    for (const [id, category, value, sortOrder] of vars) {
+      const parentValue =
+        category === 'host_company' ? hostParent[value] || null : null;
+      await conn.execute(
+        `INSERT INTO system_variables (id, category, value, parent_value, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, 1)`,
+        [id, category, value, parentValue, sortOrder]
+      );
+    }
+  } else {
     console.log('System variables ready; seed skipped.');
-    return;
   }
 
-  console.log('Seeding system variables…');
-  const vars: Array<[string, string, string, number]> = [
-    ['var-visa-1', 'visa_type', 'TITP-1', 1],
-    ['var-visa-2', 'visa_type', 'TITP-2', 2],
-    ['var-visa-3', 'visa_type', 'TITP-3', 3],
-    ['var-visa-4', 'visa_type', 'SSW-Caregiver', 4],
-    ['var-visa-5', 'visa_type', 'SSW-Construction', 5],
-    ['var-visa-6', 'visa_type', 'SSW-Food Processing', 6],
-    ['var-visa-7', 'visa_type', 'SSW-Agriculture', 7],
-    ['var-visa-8', 'visa_type', 'SSW-Manufacturing', 8],
-    ['var-visa-9', 'visa_type', 'Engineering/Humanities', 9],
-    ['var-org-1', 'supervising_org', 'Japan Skill Cooperative (JSC)', 1],
-    ['var-org-2', 'supervising_org', 'Kanto Caregiver Support Org', 2],
-    ['var-org-3', 'supervising_org', 'OTIT International Union', 3],
-    ['var-org-4', 'supervising_org', 'Chubu Textile Association', 4],
-    ['var-host-1', 'host_company', 'Tanaka Precision Machinery Co., Ltd.', 1],
-    ['var-host-2', 'host_company', 'Fuji Elderly Care Center Osaka', 2],
-    ['var-host-3', 'host_company', 'Yamada Construction Group', 3],
-    ['var-host-4', 'host_company', 'Nagoya Garment & Apparel Ltd.', 4],
-    ['var-host-5', 'host_company', 'Saitama Bento & Delica Inc.', 5],
-    ['var-job-1', 'job_category', 'Machining & Metal Works', 1],
-    ['var-job-2', 'job_category', 'Caregiver / Nursing Care', 2],
-    ['var-job-3', 'job_category', 'Scaffolding & Building Works', 3],
-    ['var-job-4', 'job_category', 'Textile Manufacturing', 4],
-    ['var-job-5', 'job_category', 'Food & Beverage Production', 5],
-  ];
+  // Existing DBs may already have variables but no host_company / school_name yet
+  const [hostRows] = await conn.query<any[]>(
+    `SELECT COUNT(*) AS c FROM system_variables WHERE category = 'host_company'`
+  );
+  if (Number(hostRows[0].c) === 0) {
+    console.log('Seeding host_company variables…');
+    const hosts: Array<[string, string, number, string]> = [
+      ['var-host-1', 'Tanaka Precision Machinery Co., Ltd.', 1, 'Japan Skill Cooperative (JSC)'],
+      ['var-host-2', 'Fuji Elderly Care Center Osaka', 2, 'Kanto Caregiver Support Org'],
+      ['var-host-3', 'Yamada Construction Group', 3, 'OTIT International Union'],
+      ['var-host-4', 'Nagoya Garment & Apparel Ltd.', 4, 'Chubu Textile Association'],
+      ['var-host-5', 'Saitama Bento & Delica Inc.', 5, 'Japan Skill Cooperative (JSC)'],
+      ['var-host-6', 'Kyoto Auto Parts Co., Ltd.', 6, 'Japan Skill Cooperative (JSC)'],
+      ['var-host-7', 'Hokkaido Dairy Farm Association', 7, 'OTIT International Union'],
+      ['var-host-8', 'Yokohama Logistics Hub K.K.', 8, 'Japan Skill Cooperative (JSC)'],
+    ];
+    for (const [id, value, sortOrder, parentValue] of hosts) {
+      try {
+        await conn.execute(
+          `INSERT INTO system_variables (id, category, value, parent_value, sort_order, is_active)
+           VALUES (?, 'host_company', ?, ?, ?, 1)`,
+          [id, value, parentValue, sortOrder]
+        );
+      } catch (err: any) {
+        if (err?.code !== 'ER_DUP_ENTRY' && err?.errno !== 1062) throw err;
+      }
+    }
+  } else {
+    // Backfill parent_value for hosts that were seeded without an org link
+    const hostParentBackfill: Array<[string, string]> = [
+      ['Tanaka Precision Machinery Co., Ltd.', 'Japan Skill Cooperative (JSC)'],
+      ['Fuji Elderly Care Center Osaka', 'Kanto Caregiver Support Org'],
+      ['Yamada Construction Group', 'OTIT International Union'],
+      ['Nagoya Garment & Apparel Ltd.', 'Chubu Textile Association'],
+      ['Saitama Bento & Delica Inc.', 'Japan Skill Cooperative (JSC)'],
+      ['Kyoto Auto Parts Co., Ltd.', 'Japan Skill Cooperative (JSC)'],
+      ['Hokkaido Dairy Farm Association', 'OTIT International Union'],
+      ['Yokohama Logistics Hub K.K.', 'Japan Skill Cooperative (JSC)'],
+    ];
+    for (const [host, org] of hostParentBackfill) {
+      await conn.execute(
+        `UPDATE system_variables
+         SET parent_value = ?
+         WHERE category = 'host_company' AND value = ?
+           AND (parent_value IS NULL OR parent_value = '')`,
+        [org, host]
+      );
+    }
+  }
 
-  for (const [id, category, value, sortOrder] of vars) {
-    await conn.execute(
-      `INSERT INTO system_variables (id, category, value, sort_order, is_active)
-       VALUES (?, ?, ?, ?, 1)`,
-      [id, category, value, sortOrder]
-    );
+  // Existing DBs may already have variables but no school_name yet
+  const [schoolRows] = await conn.query<any[]>(
+    `SELECT COUNT(*) AS c FROM system_variables WHERE category = 'school_name'`
+  );
+  if (Number(schoolRows[0].c) === 0) {
+    console.log('Seeding school_name variables…');
+    const schools: Array<[string, string, number]> = [
+      ['var-school-1', 'Tokyo Japanese Language Academy', 1],
+      ['var-school-2', 'Osaka International College', 2],
+      ['var-school-3', 'Nagoya Career School', 3],
+      ['var-school-4', 'Fukuoka Study Abroad Center', 4],
+    ];
+    for (const [id, value, sortOrder] of schools) {
+      try {
+        await conn.execute(
+          `INSERT INTO system_variables (id, category, value, sort_order, is_active)
+           VALUES (?, 'school_name', ?, ?, 1)`,
+          [id, value, sortOrder]
+        );
+      } catch (err: any) {
+        if (err?.code !== 'ER_DUP_ENTRY' && err?.errno !== 1062) throw err;
+      }
+    }
   }
 }
 
@@ -742,22 +865,14 @@ async function seedStudents(conn: mysql.Connection) {
       dob: '2002-04-18',
       passportNo: 'ST123456',
       status: 'Active',
-      notes: 'Introduction fee pending for student deployment track.',
+      notes: 'Tokyo school — introduction fee test student.',
       dep: {
         id: 'sdep-201',
         visaType: 'TITP-1',
-        supervisingOrg: 'Japan Skill Cooperative (JSC)',
-        hostCompany: 'Tanaka Precision Machinery Co., Ltd.',
-        jobCategory: 'Machining & Metal Works',
-        ownCardDate: '2026-02-15',
-        departureDate: '2026-04-01',
-        japanEntryDate: '2026-04-02',
-        contractEndDate: '2029-04-01',
+        supervisingOrg: 'Tokyo Japanese Language Academy',
+        hostCompany: '1-2-3 Shinjuku, Tokyo',
       },
-      fin: {
-        id: 'sfin-201',
-        introductionFee: 220000,
-      },
+      fin: { id: 'sfin-201', introductionFee: 220000 },
     },
     {
       id: 's-202',
@@ -767,22 +882,116 @@ async function seedStudents(conn: mysql.Connection) {
       dob: '2001-12-09',
       passportNo: 'ST234567',
       status: 'Active',
-      notes: 'Ready for introduction fee billing workflow testing.',
+      notes: 'Osaka school — introduction fee test student.',
       dep: {
         id: 'sdep-202',
         visaType: 'SSW-Food Processing',
-        supervisingOrg: 'OTIT International Union',
-        hostCompany: 'Saitama Bento & Delica Inc.',
-        jobCategory: 'Food & Beverage Production',
-        ownCardDate: '2026-03-01',
-        departureDate: '2026-05-20',
-        japanEntryDate: '2026-05-21',
-        contractEndDate: '2029-05-20',
+        supervisingOrg: 'Osaka International College',
+        hostCompany: '4-5-6 Namba, Osaka',
       },
-      fin: {
-        id: 'sfin-202',
-        introductionFee: 250000,
+      fin: { id: 'sfin-202', introductionFee: 250000 },
+    },
+    {
+      id: 's-203',
+      serialNo: 'S-2026-003',
+      name: 'Aye Aye Myint',
+      gender: 'Female',
+      dob: '2003-07-22',
+      passportNo: 'ST345678',
+      status: 'Active',
+      notes: 'Tokyo school — second student for school invoice lines.',
+      dep: {
+        id: 'sdep-203',
+        visaType: 'TITP-1',
+        supervisingOrg: 'Tokyo Japanese Language Academy',
+        hostCompany: '1-2-3 Shinjuku, Tokyo',
       },
+      fin: { id: 'sfin-203', introductionFee: 220000 },
+    },
+    {
+      id: 's-204',
+      serialNo: 'S-2026-004',
+      name: 'Zaw Min Oo',
+      gender: 'Male',
+      dob: '2000-01-30',
+      passportNo: 'ST456789',
+      status: 'Active',
+      notes: 'Tokyo school — third student.',
+      dep: {
+        id: 'sdep-204',
+        visaType: 'SSW-Manufacturing',
+        supervisingOrg: 'Tokyo Japanese Language Academy',
+        hostCompany: '1-2-3 Shinjuku, Tokyo',
+      },
+      fin: { id: 'sfin-204', introductionFee: 230000 },
+    },
+    {
+      id: 's-205',
+      serialNo: 'S-2026-005',
+      name: 'May Thu',
+      gender: 'Female',
+      dob: '2002-09-05',
+      passportNo: 'ST567890',
+      status: 'Active',
+      notes: 'Osaka school — second student.',
+      dep: {
+        id: 'sdep-205',
+        visaType: 'SSW-Caregiver',
+        supervisingOrg: 'Osaka International College',
+        hostCompany: '4-5-6 Namba, Osaka',
+      },
+      fin: { id: 'sfin-205', introductionFee: 240000 },
+    },
+    {
+      id: 's-206',
+      serialNo: 'S-2026-006',
+      name: 'Nay Lin',
+      gender: 'Male',
+      dob: '2001-06-14',
+      passportNo: 'ST678901',
+      status: 'Active',
+      notes: 'Nagoya school — paid invoice test.',
+      dep: {
+        id: 'sdep-206',
+        visaType: 'TITP-2',
+        supervisingOrg: 'Nagoya Career School',
+        hostCompany: '7-8-9 Sakae, Nagoya',
+      },
+      fin: { id: 'sfin-206', introductionFee: 210000 },
+    },
+    {
+      id: 's-207',
+      serialNo: 'S-2026-007',
+      name: 'Su Myat',
+      gender: 'Female',
+      dob: '2003-11-11',
+      passportNo: 'ST789012',
+      status: 'Active',
+      notes: 'Nagoya school — second student.',
+      dep: {
+        id: 'sdep-207',
+        visaType: 'TITP-1',
+        supervisingOrg: 'Nagoya Career School',
+        hostCompany: '7-8-9 Sakae, Nagoya',
+      },
+      fin: { id: 'sfin-207', introductionFee: 210000 },
+    },
+    {
+      id: 's-208',
+      serialNo: 'S-2026-008',
+      name: 'Phone Myat',
+      gender: 'Male',
+      dob: '2002-02-28',
+      passportNo: 'ST890123',
+      status: 'Active',
+      notes: 'Fukuoka school — pending invoice test.',
+      dep: {
+        id: 'sdep-208',
+        visaType: 'Engineering/Humanities',
+        supervisingOrg: 'Fukuoka Study Abroad Center',
+        hostCompany: '2-1 Tenjin, Fukuoka',
+      },
+      fin: { id: 'sfin-208', introductionFee: 260000 },
     },
   ];
 
@@ -796,19 +1005,8 @@ async function seedStudents(conn: mysql.Connection) {
       `INSERT INTO student_deployments
         (id, student_id, visa_type, supervising_org, host_company, job_category,
          own_card_date, departure_date, japan_entry_date, contract_end_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        s.dep.id,
-        s.id,
-        s.dep.visaType,
-        s.dep.supervisingOrg,
-        s.dep.hostCompany,
-        s.dep.jobCategory,
-        s.dep.ownCardDate,
-        s.dep.departureDate,
-        s.dep.japanEntryDate,
-        s.dep.contractEndDate,
-      ]
+       VALUES (?, ?, ?, ?, ?, '', NULL, NULL, NULL, NULL)`,
+      [s.dep.id, s.id, s.dep.visaType, s.dep.supervisingOrg, s.dep.hostCompany]
     );
     await conn.execute(
       `INSERT INTO student_financial_configs
@@ -817,6 +1015,8 @@ async function seedStudents(conn: mysql.Connection) {
       [s.fin.id, s.id, s.fin.introductionFee]
     );
   }
+
+  console.log('Student profiles seeded. Run npm run seed:test-fees for school/host fee invoices.');
 }
 
 async function seedInvoices(conn: mysql.Connection) {

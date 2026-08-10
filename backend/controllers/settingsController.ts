@@ -2,12 +2,16 @@ import type { Request, Response } from 'express';
 import * as settingsService from '../services/settingsService.js';
 
 export async function getPrint(req: Request, res: Response): Promise<void> {
-  const settings = await settingsService.getPrintSettings();
-  res.json(settings);
+  const both = await settingsService.getBothPrintSettings();
+  res.json(both);
 }
 
 export async function updatePrint(req: Request, res: Response): Promise<void> {
+  const slotRaw = req.body?.slot;
+  const slot =
+    slotRaw === 2 || slotRaw === '2' ? 2 : slotRaw === 1 || slotRaw === '1' ? 1 : 1;
   const settings = await settingsService.updatePrintSettings({
+    slot,
     agencyName: typeof req.body?.agencyName === 'string' ? req.body.agencyName : undefined,
     address: typeof req.body?.address === 'string' ? req.body.address : undefined,
     phone: typeof req.body?.phone === 'string' ? req.body.phone : undefined,
@@ -47,6 +51,7 @@ export async function createVariable(req: Request, res: Response): Promise<void>
   const variable = await settingsService.createVariable({
     category: typeof req.body?.category === 'string' ? req.body.category : '',
     value: typeof req.body?.value === 'string' ? req.body.value : '',
+    parentValue: typeof req.body?.parentValue === 'string' ? req.body.parentValue : undefined,
     sortOrder: typeof req.body?.sortOrder === 'number' ? req.body.sortOrder : undefined,
   });
   res.status(201).json(variable);
@@ -55,6 +60,12 @@ export async function createVariable(req: Request, res: Response): Promise<void>
 export async function updateVariable(req: Request, res: Response): Promise<void> {
   const variable = await settingsService.updateVariable(req.params.id, {
     value: typeof req.body?.value === 'string' ? req.body.value : undefined,
+    parentValue:
+      req.body?.parentValue === null
+        ? null
+        : typeof req.body?.parentValue === 'string'
+          ? req.body.parentValue
+          : undefined,
     sortOrder: typeof req.body?.sortOrder === 'number' ? req.body.sortOrder : undefined,
     isActive: typeof req.body?.isActive === 'boolean' ? req.body.isActive : undefined,
   });

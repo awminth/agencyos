@@ -17,12 +17,16 @@ import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { PrintableInvoiceModal } from './PrintableInvoiceModal';
 import { PaymentVoucherSheet } from './PaymentVoucherSheet';
 import { MobileMeta } from './MobileMeta';
+import {
+  laterDate,
+  invoiceStatusBadgeClass,
+  invoiceStatusRowClass,
+  balanceRemainClass,
+  balanceTone,
+} from '../utils/invoiceBalanceUi';
 
 function invoiceStatusClass(status: InvoiceStatus) {
-  if (status === 'Paid') return 'bg-emerald-100 text-emerald-800';
-  if (status === 'Partial') return 'bg-amber-100 text-amber-800';
-  if (status === 'Overdue') return 'bg-red-100 text-red-800';
-  return 'bg-slate-100 text-slate-700';
+  return invoiceStatusBadgeClass(status);
 }
 
 function invoiceStatusKey(status: InvoiceStatus) {
@@ -31,6 +35,32 @@ function invoiceStatusKey(status: InvoiceStatus) {
     | 'status.partial'
     | 'status.paid'
     | 'status.overdue';
+}
+
+function outstandingAmountClass(amount: number) {
+  return balanceRemainClass(balanceTone(amount, amount > 0 ? amount : 1));
+}
+
+function remainCardClass(remainAmount: number) {
+  return remainAmount > 0
+    ? 'rounded-xl border-2 border-amber-400 bg-amber-100 px-4 py-3'
+    : 'rounded-xl border-2 border-blue-500 bg-blue-100 px-4 py-3';
+}
+
+function remainCardLabelClass(remainAmount: number) {
+  return remainAmount > 0
+    ? 'text-[10px] font-bold tracking-wider text-amber-800/80 uppercase'
+    : 'text-[10px] font-bold tracking-wider text-blue-700/80 uppercase';
+}
+
+function remainCardValueClass(remainAmount: number) {
+  return remainAmount > 0
+    ? 'mt-1 font-mono text-base font-bold text-amber-900'
+    : 'mt-1 font-mono text-base font-bold text-blue-800';
+}
+
+function invoiceRowClass(status: InvoiceStatus) {
+  return invoiceStatusRowClass(status);
 }
 
 interface WorkerFeeDetailPageProps {
@@ -46,36 +76,42 @@ interface WorkerFeeDetailPageProps {
 export function buildWorkerSummaries(
   invoices: Invoice[],
   feeType: InvoiceFeeType,
-  workersById: Record<string, { serialNo?: string }>
+  _workersById?: Record<string, { serialNo?: string }>
 ): InvoiceWorkerSummary[] {
   const map = new Map<string, InvoiceWorkerSummary>();
   for (const inv of invoices) {
     if (inv.feeType !== feeType) continue;
-    const existing = map.get(inv.workerId);
+    const hostCompany = inv.hostCompany || '—';
+    const key = `${hostCompany}||${inv.supervisingOrg || ''}`;
+    const existing = map.get(key);
+    const workerCount = inv.workerCount ?? inv.lines?.length ?? 0;
+    const payDate = inv.paymentReceivedDate || undefined;
     if (!existing) {
-      map.set(inv.workerId, {
-        workerId: inv.workerId,
-        workerName: inv.workerName,
-        passportNo: inv.passportNo,
-        hostCompany: inv.hostCompany,
-        serialNo: workersById[inv.workerId]?.serialNo,
+      map.set(key, {
+        hostCompany,
+        supervisingOrg: inv.supervisingOrg || '',
+        workerCount,
         feeType,
         totalAmount: inv.totalAmount || 0,
         totalPaid: inv.amountReceived || 0,
         remainAmount: inv.outstandingAmount || 0,
         invoiceCount: 1,
         paymentCount: inv.amountReceived > 0 ? 1 : 0,
+        lastPaymentDate: payDate,
+        workerName: hostCompany,
       });
     } else {
       existing.totalAmount += inv.totalAmount || 0;
       existing.totalPaid += inv.amountReceived || 0;
       existing.remainAmount += inv.outstandingAmount || 0;
       existing.invoiceCount += 1;
+      existing.workerCount = Math.max(existing.workerCount, workerCount);
       if (inv.amountReceived > 0) existing.paymentCount += 1;
+      existing.lastPaymentDate = laterDate(existing.lastPaymentDate, payDate);
     }
   }
   return Array.from(map.values()).sort((a, b) =>
-    a.workerName.localeCompare(b.workerName)
+    a.hostCompany.localeCompare(b.hostCompany)
   );
 }
 
@@ -98,11 +134,13 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
   const canDelete = can(currentUser.permissions, 'invoices', 'delete');
 
   const summary = useMemo(() => {
-    const list = buildWorkerSummaries(invoices, initialSummary.feeType, {
-      [initialSummary.workerId]: { serialNo: initialSummary.serialNo },
-    });
+    const list = buildWorkerSummaries(invoices, initialSummary.feeType);
     return (
-      list.find((s) => s.workerId === initialSummary.workerId) || {
+      list.find(
+        (s) =>
+          s.hostCompany === initialSummary.hostCompany &&
+          (s.supervisingOrg || '') === (initialSummary.supervisingOrg || '')
+      ) || {
         ...initialSummary,
         totalAmount: 0,
         totalPaid: 0,
@@ -114,7 +152,10 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
   }, [invoices, initialSummary]);
 
   const workerInvoices = invoices.filter(
-    (i) => i.workerId === summary.workerId && i.feeType === summary.feeType
+    (i) =>
+      i.hostCompany === summary.hostCompany &&
+      (i.supervisingOrg || '') === (summary.supervisingOrg || '') &&
+      i.feeType === summary.feeType
   );
 
   const [payments, setPayments] = useState<InvoicePayment[]>([]);
@@ -159,7 +200,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
     setLoadingPayments(true);
     try {
       const res = await fetch(
-        `/api/invoices/by-worker/payments?workerId=${encodeURIComponent(summary.workerId)}&feeType=${summary.feeType}`
+        `/api/invoices/by-host/payments?hostCompany=${encodeURIComponent(summary.hostCompany)}&feeType=${summary.feeType}`
       );
       const data = await res.json();
       setPayments(Array.isArray(data) ? data : []);
@@ -172,7 +213,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
 
   useEffect(() => {
     loadPayments();
-  }, [summary.workerId, summary.feeType, invoices]);
+  }, [summary.hostCompany, summary.feeType, invoices]);
 
   const feeLabel =
     summary.feeType === 'flight'
@@ -192,8 +233,11 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Pay failed');
     }
+    const created = (await res.json()) as InvoicePayment;
     setPayInvoice(null);
     await onRefresh();
+    await loadPayments();
+    setViewPayment(created);
   };
 
   const handleDeletePayment = async (id: string) => {
@@ -217,11 +261,12 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
             </button>
             <div className="min-w-0">
               <h2 className="truncate text-xl font-bold tracking-tight text-slate-900">
-                {summary.workerName}
+                {summary.hostCompany}
               </h2>
               <p className="mt-1 text-xs text-slate-500">
                 {feeLabel}
-                {summary.serialNo ? ` · ${summary.serialNo}` : ''} · {summary.passportNo}
+                {summary.supervisingOrg ? ` · ${summary.supervisingOrg}` : ''}
+                {` · ${t('invoices.workerCount')}: ${summary.workerCount}`}
               </p>
             </div>
           </div>
@@ -236,19 +281,25 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
               {money(summary.totalAmount)}
             </p>
           </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-[10px] font-bold tracking-wider text-emerald-700/70 uppercase">
+          <div
+            className={
+              summary.remainAmount <= 0 && summary.totalAmount > 0
+                ? 'rounded-xl border-2 border-blue-500 bg-blue-100 px-4 py-3'
+                : 'rounded-xl border border-blue-200 bg-blue-50 px-4 py-3'
+            }
+          >
+            <p className="text-[10px] font-bold tracking-wider text-blue-700/80 uppercase">
               {t('invoices.totalPaid')}
             </p>
-            <p className="mt-1 font-mono text-base font-bold text-emerald-700">
+            <p className="mt-1 font-mono text-base font-bold text-blue-800">
               {money(summary.totalPaid)}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-[10px] font-bold tracking-wider text-amber-700/70 uppercase">
+          <div className={remainCardClass(summary.remainAmount)}>
+            <p className={remainCardLabelClass(summary.remainAmount)}>
               {t('invoices.remainAmount')}
             </p>
-            <p className="mt-1 font-mono text-base font-bold text-amber-700">
+            <p className={remainCardValueClass(summary.remainAmount)}>
               {money(summary.remainAmount)}
             </p>
           </div>
@@ -273,16 +324,24 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
           </h3>
         </div>
         {workerInvoices.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-slate-400">{t('invoices.noInvoicesForWorker')}</p>
+          <p className="px-5 py-8 text-sm text-slate-400">{t('invoices.noInvoicesForHost')}</p>
         ) : (
           <>
             <div className="divide-y divide-slate-100 md:hidden">
               {workerInvoices.map((inv) => (
-                <div key={inv.id} className="px-4 py-3">
+                <div
+                  key={inv.id}
+                  className={`px-4 py-3 ${invoiceRowClass(inv.status)}`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-mono text-sm font-bold text-slate-900">{inv.invoiceNo}</p>
                       <p className="text-[11px] text-slate-500">{inv.billingPeriod}</p>
+                      {inv.status === 'Paid' && inv.paymentReceivedDate ? (
+                        <p className="mt-0.5 text-[11px] font-semibold text-blue-700">
+                          {t('invoices.payDate')}: {inv.paymentReceivedDate}
+                        </p>
+                      ) : null}
                     </div>
                     <span className={`status-badge shrink-0 ${invoiceStatusClass(inv.status)}`}>
                       {t(invoiceStatusKey(inv.status))}
@@ -301,11 +360,23 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                       { label: t('invoices.total'), value: money(inv.totalAmount, inv.currency) },
                       {
                         label: t('invoices.received'),
-                        value: money(inv.amountReceived, inv.currency),
+                        value: (
+                          <span
+                            className={`font-semibold ${
+                              inv.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
+                            }`}
+                          >
+                            {money(inv.amountReceived, inv.currency)}
+                          </span>
+                        ),
                       },
                       {
                         label: t('invoices.outstanding'),
-                        value: money(inv.outstandingAmount, inv.currency),
+                        value: (
+                          <span className={`font-semibold ${outstandingAmountClass(inv.outstandingAmount)}`}>
+                            {money(inv.outstandingAmount, inv.currency)}
+                          </span>
+                        ),
                       },
                       {
                         label: t('invoices.colReceipt'),
@@ -380,11 +451,16 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                 </thead>
                 <tbody>
                   {workerInvoices.map((inv) => (
-                    <tr key={inv.id}>
+                    <tr key={inv.id} className={invoiceRowClass(inv.status)}>
                       <td>
                         <div className="cell-stack">
                           <span className="cell-id">{inv.invoiceNo}</span>
                           <span className="cell-secondary">{inv.billingPeriod}</span>
+                          {inv.status === 'Paid' && inv.paymentReceivedDate ? (
+                            <span className="text-[11px] font-semibold text-blue-700">
+                              {t('invoices.payDate')}: {inv.paymentReceivedDate}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td>
@@ -406,10 +482,16 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                       <td className="text-right">
                         <div className="cell-stack items-end">
                           <span className="cell-mono">{money(inv.totalAmount, inv.currency)}</span>
-                          <span className="cell-mono text-emerald-600">
+                          <span
+                            className={`cell-mono ${
+                              inv.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
+                            }`}
+                          >
                             {money(inv.amountReceived, inv.currency)}
                           </span>
-                          <span className="cell-mono font-semibold text-amber-700">
+                          <span
+                            className={`cell-mono font-semibold ${outstandingAmountClass(inv.outstandingAmount)}`}
+                          >
                             {money(inv.outstandingAmount, inv.currency)}
                           </span>
                         </div>
@@ -507,7 +589,11 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                         { label: t('invoices.colReceipt'), value: p.receiptNo || '—' },
                         {
                           label: t('invoices.outstanding'),
-                          value: money(bal.remainAmount, p.currency),
+                          value: (
+                            <span className={`font-semibold ${outstandingAmountClass(bal.remainAmount)}`}>
+                              {money(bal.remainAmount, p.currency)}
+                            </span>
+                          ),
                         },
                         ...(p.notes ? [{ label: t('workerDetail.notesTitle'), value: p.notes }] : []),
                       ]}
@@ -566,7 +652,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                           </div>
                         </td>
                         <td className="text-right">
-                          <span className="cell-mono font-semibold text-emerald-700">
+                          <span className="cell-mono font-semibold text-blue-700">
                             {money(p.amount, p.currency)}
                           </span>
                         </td>
@@ -574,7 +660,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                           <span className="cell-secondary">{p.receiptNo || '—'}</span>
                         </td>
                         <td className="text-right">
-                          <span className="cell-mono text-amber-700">
+                          <span className={`cell-mono ${outstandingAmountClass(bal.remainAmount)}`}>
                             {money(bal.remainAmount, p.currency)}
                           </span>
                         </td>
@@ -658,10 +744,9 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
       {viewSummaryVoucher && (
         <PaymentVoucherSheet
           mode="summary"
-          workerName={summary.workerName}
-          passportNo={summary.passportNo}
+          workerName={summary.hostCompany}
           hostCompany={summary.hostCompany}
-          serialNo={summary.serialNo}
+          supervisingOrg={summary.supervisingOrg}
           feeType={summary.feeType}
           totalAmount={summary.totalAmount}
           totalPaid={summary.totalPaid}

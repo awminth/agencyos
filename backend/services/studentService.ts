@@ -115,11 +115,8 @@ export async function createStudent(body: Partial<Student>): Promise<Student> {
     throw new AppError('Passport နံပါတ် ထည့်သွင်းပါ။', 400);
   }
   const dep = body.deployment;
-  if (!dep?.visaType || !dep?.supervisingOrg || !dep?.hostCompany || !dep?.jobCategory) {
-    throw new AppError(
-      'Visa / ကြီးကြပ်ရေး / Host Company / အလုပ်အမျိုးအစား ကို ရွေးချယ်ပါ။',
-      400
-    );
+  if (!dep?.visaType || !dep?.supervisingOrg?.trim() || !dep?.hostCompany?.trim()) {
+    throw new AppError('Visa / School Name / School Address ကို ဖြည့်ပါ။', 400);
   }
 
   const id = newId('s');
@@ -171,13 +168,13 @@ export async function createStudent(body: Partial<Student>): Promise<Student> {
         id: depId,
         studentId: id,
         visaType: dep.visaType || 'TITP-1',
-        supervisingOrg: dep.supervisingOrg || '',
-        hostCompany: dep.hostCompany || '',
-        jobCategory: dep.jobCategory || '',
-        ownCardDate: dep.ownCardDate || '',
+        supervisingOrg: dep.supervisingOrg.trim(),
+        hostCompany: dep.hostCompany.trim(),
+        jobCategory: '',
+        ownCardDate: '',
         departureDate: dep.departureDate || '',
         japanEntryDate: dep.japanEntryDate || '',
-        contractEndDate: dep.contractEndDate || '',
+        contractEndDate: '',
       }
     );
 
@@ -250,13 +247,13 @@ export async function updateStudent(id: string, body: Partial<Student>): Promise
       {
         id,
         visaType: deployment.visaType,
-        supervisingOrg: deployment.supervisingOrg,
-        hostCompany: deployment.hostCompany,
-        jobCategory: deployment.jobCategory,
-        ownCardDate: deployment.ownCardDate || '',
+        supervisingOrg: deployment.supervisingOrg || '',
+        hostCompany: deployment.hostCompany || '',
+        jobCategory: '',
+        ownCardDate: '',
         departureDate: deployment.departureDate || '',
         japanEntryDate: deployment.japanEntryDate || '',
-        contractEndDate: deployment.contractEndDate || '',
+        contractEndDate: '',
       }
     );
 

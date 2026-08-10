@@ -7,13 +7,21 @@ export type VariableCategory =
   | 'visa_type'
   | 'supervising_org'
   | 'host_company'
-  | 'job_category';
+  | 'job_category'
+  | 'school_name';
 
 export interface PrintSettings {
   agencyName: string;
   address: string;
   phone: string;
   logoData: string | null;
+}
+
+export type PrintVoucherSlot = 1 | 2;
+
+export interface BothPrintSettings {
+  voucher1: PrintSettings;
+  voucher2: PrintSettings;
 }
 
 export type DisplayCurrency = 'JPY' | 'MMK';
@@ -28,11 +36,14 @@ export interface SystemVariable {
   id: string;
   category: VariableCategory;
   value: string;
+  /** For host_company: linked supervising_org value */
+  parentValue?: string | null;
   sortOrder: number;
   isActive: boolean;
 }
 
 interface PrintRow extends RowDataPacket {
+  id?: number;
   agency_name: string;
   address: string | null;
   phone: string | null;
@@ -53,6 +64,7 @@ interface VariableRow extends RowDataPacket {
   id: string;
   category: VariableCategory;
   value: string;
+  parent_value: string | null;
   sort_order: number;
   is_active: number;
 }
@@ -62,32 +74,128 @@ const VALID_CATEGORIES: VariableCategory[] = [
   'supervising_org',
   'host_company',
   'job_category',
+  'school_name',
 ];
 
-export async function getPrintSettings(): Promise<PrintSettings> {
-  const [rows] = await pool.execute<PrintRow[]>(
-    `SELECT agency_name, address, phone, logo_data FROM print_settings WHERE id = 1 LIMIT 1`
-  );
+/** Ensure system_variables.category ENUM includes school_name (existing DBs). */
+export async function ensureSchoolNameCategory(): Promise<void> {
+  await pool
+    .execute(
+      `ALTER TABLE system_variables
+       MODIFY category ENUM(
+         'visa_type',
+         'supervising_org',
+         'host_company',
+         'job_category',
+         'school_name'
+       ) NOT NULL`
+    )
+    .catch((err: { code?: string; message?: string }) => {
+      if (err?.code !== 'ER_NO_SUCH_TABLE') {
+        console.warn('ensureSchoolNameCategory skipped:', err?.code || err?.message);
+      }
+    });
+}
 
-  if (!rows[0]) {
-    return { agencyName: '', address: '', phone: '', logoData: null };
+/** Ensure host_company can link to a supervising_org via parent_value. */
+export async function ensureVariableParentValue(): Promise<void> {
+  try {
+    await pool.execute(
+      `ALTER TABLE system_variables ADD COLUMN parent_value VARCHAR(200) NULL AFTER value`
+    );
+  } catch (err: any) {
+    if (err?.code !== 'ER_DUP_FIELDNAME' && err?.errno !== 1060) {
+      // ignore
+    }
   }
+}
 
+function mapVariable(r: VariableRow): SystemVariable {
   return {
-    agencyName: rows[0].agency_name || '',
-    address: rows[0].address || '',
-    phone: rows[0].phone || '',
-    logoData: rows[0].logo_data || null,
+    id: r.id,
+    category: r.category,
+    value: r.value,
+    parentValue: r.parent_value || null,
+    sortOrder: r.sort_order,
+    isActive: !!r.is_active,
   };
 }
 
-export async function updatePrintSettings(input: {
-  agencyName?: string;
-  address?: string;
-  phone?: string;
-  logoData?: string | null;
-}): Promise<PrintSettings> {
-  const current = await getPrintSettings();
+function emptyPrint(): PrintSettings {
+  return { agencyName: '', address: '', phone: '', logoData: null };
+}
+
+function mapPrintRow(row: PrintRow | undefined): PrintSettings {
+  if (!row) return emptyPrint();
+  return {
+    agencyName: row.agency_name || '',
+    address: row.address || '',
+    phone: row.phone || '',
+    logoData: row.logo_data || null,
+  };
+}
+
+function normalizeSlot(slot: number | undefined): PrintVoucherSlot {
+  return slot === 2 ? 2 : 1;
+}
+
+/** Ensure print_settings rows for voucher 1 and voucher 2 exist. */
+export async function ensurePrintSettingsSlots(): Promise<void> {
+  await pool.execute(
+    `INSERT IGNORE INTO print_settings (id, agency_name, address, phone, logo_data)
+     VALUES (1, '', NULL, NULL, NULL)`
+  );
+  const [rows] = await pool.execute<PrintRow[]>(
+    `SELECT agency_name, address, phone, logo_data FROM print_settings WHERE id = 1 LIMIT 1`
+  );
+  const src = rows[0];
+  await pool.execute(
+    `INSERT IGNORE INTO print_settings (id, agency_name, address, phone, logo_data)
+     VALUES (2, :agencyName, :address, :phone, :logoData)`,
+    {
+      agencyName: src?.agency_name || '',
+      address: src?.address || null,
+      phone: src?.phone || null,
+      logoData: src?.logo_data || null,
+    }
+  );
+}
+
+export async function getPrintSettings(slot: PrintVoucherSlot = 1): Promise<PrintSettings> {
+  await ensurePrintSettingsSlots();
+  const [rows] = await pool.execute<PrintRow[]>(
+    `SELECT agency_name, address, phone, logo_data FROM print_settings WHERE id = :id LIMIT 1`,
+    { id: slot }
+  );
+  return mapPrintRow(rows[0]);
+}
+
+export async function getBothPrintSettings(): Promise<BothPrintSettings> {
+  await ensurePrintSettingsSlots();
+  const [rows] = await pool.execute<PrintRow[]>(
+    `SELECT id, agency_name, address, phone, logo_data FROM print_settings WHERE id IN (1, 2)`
+  );
+  const byId = new Map<number, PrintRow>();
+  for (const row of rows) {
+    byId.set(Number(row.id), row);
+  }
+  return {
+    voucher1: mapPrintRow(byId.get(1)),
+    voucher2: mapPrintRow(byId.get(2)),
+  };
+}
+
+export async function updatePrintSettings(
+  input: {
+    agencyName?: string;
+    address?: string;
+    phone?: string;
+    logoData?: string | null;
+    slot?: number;
+  }
+): Promise<BothPrintSettings> {
+  const slot = normalizeSlot(input.slot);
+  const current = await getPrintSettings(slot);
   const agencyName = (input.agencyName ?? current.agencyName ?? '').trim();
   const address = (input.address ?? current.address ?? '').trim() || null;
   const phone = (input.phone ?? current.phone ?? '').trim() || null;
@@ -96,16 +204,16 @@ export async function updatePrintSettings(input: {
 
   await pool.execute(
     `INSERT INTO print_settings (id, agency_name, address, phone, logo_data)
-     VALUES (1, :agencyName, :address, :phone, :logoData)
+     VALUES (:id, :agencyName, :address, :phone, :logoData)
      ON DUPLICATE KEY UPDATE
        agency_name = VALUES(agency_name),
        address = VALUES(address),
        phone = VALUES(phone),
        logo_data = VALUES(logo_data)`,
-    { agencyName, address, phone, logoData }
+    { id: slot, agencyName, address, phone, logoData }
   );
 
-  return getPrintSettings();
+  return getBothPrintSettings();
 }
 
 export async function getCurrencySettings(): Promise<CurrencySettings> {
@@ -160,7 +268,8 @@ export async function listVariables(
   category?: string,
   activeOnly = false
 ): Promise<SystemVariable[]> {
-  let sql = `SELECT id, category, value, sort_order, is_active FROM system_variables`;
+  await ensureVariableParentValue();
+  let sql = `SELECT id, category, value, parent_value, sort_order, is_active FROM system_variables`;
   const params: { category?: string } = {};
   const where: string[] = [];
 
@@ -175,35 +284,49 @@ export async function listVariables(
   sql += ` ORDER BY category ASC, sort_order ASC, value ASC`;
 
   const [rows] = await pool.execute<VariableRow[]>(sql, params);
-  return rows.map((r) => ({
-    id: r.id,
-    category: r.category,
-    value: r.value,
-    sortOrder: r.sort_order,
-    isActive: !!r.is_active,
-  }));
+  return rows.map(mapVariable);
 }
 
 export async function createVariable(input: {
   category: string;
   value: string;
+  parentValue?: string | null;
   sortOrder?: number;
 }): Promise<SystemVariable> {
+  await ensureVariableParentValue();
   if (!VALID_CATEGORIES.includes(input.category as VariableCategory)) {
     throw new AppError('Invalid variable category', 400);
   }
   const value = input.value.trim();
   if (!value) throw new AppError('Value is required', 400);
 
+  let parentValue: string | null = null;
+  if (input.category === 'host_company') {
+    parentValue = (input.parentValue || '').trim() || null;
+    if (!parentValue) {
+      throw new AppError('Host Company အတွက် Supervising Org ရွေးပါ။', 400);
+    }
+    const [orgRows] = await pool.execute<VariableRow[]>(
+      `SELECT id FROM system_variables
+       WHERE category = 'supervising_org' AND value = :org AND is_active = 1
+       LIMIT 1`,
+      { org: parentValue }
+    );
+    if (!orgRows[0]) {
+      throw new AppError('ရွေးထားသော Supervising Org မရှိပါ (သို့မဟုတ် inactive)', 400);
+    }
+  }
+
   const id = randomUUID();
   try {
     await pool.execute(
-      `INSERT INTO system_variables (id, category, value, sort_order, is_active)
-       VALUES (:id, :category, :value, :sortOrder, 1)`,
+      `INSERT INTO system_variables (id, category, value, parent_value, sort_order, is_active)
+       VALUES (:id, :category, :value, :parentValue, :sortOrder, 1)`,
       {
         id,
         category: input.category,
         value,
+        parentValue,
         sortOrder: Number(input.sortOrder) || 0,
       }
     );
@@ -218,6 +341,7 @@ export async function createVariable(input: {
     id,
     category: input.category as VariableCategory,
     value,
+    parentValue,
     sortOrder: Number(input.sortOrder) || 0,
     isActive: true,
   };
@@ -225,10 +349,16 @@ export async function createVariable(input: {
 
 export async function updateVariable(
   id: string,
-  input: { value?: string; sortOrder?: number; isActive?: boolean }
+  input: {
+    value?: string;
+    parentValue?: string | null;
+    sortOrder?: number;
+    isActive?: boolean;
+  }
 ): Promise<SystemVariable> {
+  await ensureVariableParentValue();
   const [rows] = await pool.execute<VariableRow[]>(
-    `SELECT id, category, value, sort_order, is_active FROM system_variables WHERE id = :id LIMIT 1`,
+    `SELECT id, category, value, parent_value, sort_order, is_active FROM system_variables WHERE id = :id LIMIT 1`,
     { id }
   );
   const existing = rows[0];
@@ -238,6 +368,28 @@ export async function updateVariable(
     input.value !== undefined ? input.value.trim() : existing.value;
   if (!value) throw new AppError('Value is required', 400);
 
+  let parentValue =
+    input.parentValue !== undefined
+      ? input.parentValue?.trim() || null
+      : existing.parent_value;
+
+  if (existing.category === 'host_company') {
+    if (!parentValue) {
+      throw new AppError('Host Company အတွက် Supervising Org ရွေးပါ။', 400);
+    }
+    const [orgRows] = await pool.execute<VariableRow[]>(
+      `SELECT id FROM system_variables
+       WHERE category = 'supervising_org' AND value = :org AND is_active = 1
+       LIMIT 1`,
+      { org: parentValue }
+    );
+    if (!orgRows[0]) {
+      throw new AppError('ရွေးထားသော Supervising Org မရှိပါ (သို့မဟုတ် inactive)', 400);
+    }
+  } else {
+    parentValue = null;
+  }
+
   const sortOrder =
     input.sortOrder !== undefined ? Number(input.sortOrder) : existing.sort_order;
   const isActive =
@@ -246,9 +398,9 @@ export async function updateVariable(
   try {
     await pool.execute(
       `UPDATE system_variables
-       SET value = :value, sort_order = :sortOrder, is_active = :isActive
+       SET value = :value, parent_value = :parentValue, sort_order = :sortOrder, is_active = :isActive
        WHERE id = :id`,
-      { id, value, sortOrder, isActive }
+      { id, value, parentValue, sortOrder, isActive }
     );
   } catch (err: any) {
     if (err?.code === 'ER_DUP_ENTRY') {
@@ -261,6 +413,7 @@ export async function updateVariable(
     id,
     category: existing.category,
     value,
+    parentValue,
     sortOrder,
     isActive: !!isActive,
   };

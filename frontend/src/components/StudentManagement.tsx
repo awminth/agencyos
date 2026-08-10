@@ -99,7 +99,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
       t('reports.colPassport'),
       t('common.status'),
       t('deployments.colVisa'),
-      t('reports.colHostCompany'),
+      t('students.schoolName'),
+      t('students.schoolAddress'),
       t('workerModal.notes'),
     ];
     const rows = filteredStudents.map((student) => [
@@ -110,6 +111,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
       student.passportNo,
       student.status,
       student.deployment.visaType,
+      student.deployment.supervisingOrg || '',
       student.deployment.hostCompany || '',
       student.notes || '',
     ]);
@@ -123,7 +125,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
       t('reports.colPassport'),
       t('common.status'),
       t('deployments.colVisa'),
-      t('reports.colHostCompany'),
+      t('students.schoolName'),
     ];
     const rows = filteredStudents.map((student) => [
       `${student.name} (${student.gender === 'Male' ? t('common.male') : t('common.female')})`,
@@ -131,7 +133,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
       student.passportNo,
       student.status,
       student.deployment.visaType,
-      student.deployment.hostCompany || '',
+      student.deployment.supervisingOrg || '',
     ]);
     exportToPDF(t('students.title'), headers, rows, { subtitle: t('students.subtitle') });
   };
@@ -303,7 +305,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                   items={[
                     { label: t('reports.colPassport'), value: student.passportNo || '—' },
                     { label: t('deployments.colVisa'), value: student.deployment.visaType || '—' },
-                    { label: t('reports.colHostCompany'), value: student.deployment.hostCompany || '—' },
+                    { label: t('students.schoolName'), value: student.deployment.supervisingOrg || '—' },
+                    { label: t('students.schoolAddress'), value: student.deployment.hostCompany || '—' },
                     {
                       label: t('students.introductionFee'),
                       value: `JPY ${Number(student.financialConfig?.introductionFee || 0).toLocaleString()}`,
@@ -324,7 +327,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                 <th>{t('workers.colName')}</th>
                 <th>{t('workers.colPassport')}</th>
                 <th>{t('deployments.colVisa')}</th>
-                <th>{t('workers.colHostBrief')}</th>
+                <th>{t('students.colSchool')}</th>
                 <th className="text-right">{t('students.introductionFee')}</th>
                 <th className="text-center">{t('common.status')}</th>
                 <th className="text-right">{t('common.actions')}</th>
@@ -358,17 +361,12 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                       </div>
                     </td>
                     <td>
-                      <div className="cell-stack">
-                        <span className="pill pill-blue">{student.deployment.visaType || '—'}</span>
-                        <span className="cell-secondary max-w-[180px] truncate">
-                          {student.deployment.jobCategory || '—'}
-                        </span>
-                      </div>
+                      <span className="pill pill-blue">{student.deployment.visaType || '—'}</span>
                     </td>
                     <td>
                       <div className="cell-stack">
-                        <span className="cell-primary">{student.deployment.hostCompany || '—'}</span>
-                        <span className="cell-secondary">{student.deployment.supervisingOrg || '—'}</span>
+                        <span className="cell-primary">{student.deployment.supervisingOrg || '—'}</span>
+                        <span className="cell-secondary">{student.deployment.hostCompany || '—'}</span>
                       </div>
                     </td>
                     <td className="text-right">

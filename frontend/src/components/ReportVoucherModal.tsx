@@ -45,11 +45,12 @@ export const ReportVoucherModal: React.FC<ReportVoucherModalProps> = ({
     fetch('/api/settings/print')
       .then((r) => r.json())
       .then((data) => {
+        const src = data?.voucher1 || data;
         setPrintSettings({
-          agencyName: data.agencyName || '',
-          address: data.address || '',
-          phone: data.phone || '',
-          logoData: data.logoData || null,
+          agencyName: src.agencyName || '',
+          address: src.address || '',
+          phone: src.phone || '',
+          logoData: src.logoData || null,
         });
       })
       .catch(() => undefined);

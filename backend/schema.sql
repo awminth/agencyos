@@ -33,8 +33,9 @@ CREATE TABLE IF NOT EXISTS currency_settings (
 
 CREATE TABLE IF NOT EXISTS system_variables (
   id VARCHAR(36) PRIMARY KEY,
-  category ENUM('visa_type', 'supervising_org', 'host_company', 'job_category') NOT NULL,
+  category ENUM('visa_type', 'supervising_org', 'host_company', 'job_category', 'school_name') NOT NULL,
   value VARCHAR(200) NOT NULL,
+  parent_value VARCHAR(200) NULL,
   sort_order INT NOT NULL DEFAULT 0,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -85,7 +86,9 @@ CREATE TABLE IF NOT EXISTS financial_configs (
 CREATE TABLE IF NOT EXISTS invoices (
   id VARCHAR(64) PRIMARY KEY,
   invoice_no VARCHAR(30) NOT NULL UNIQUE,
-  worker_id VARCHAR(64) NOT NULL,
+  worker_id VARCHAR(64) NULL,
+  host_company VARCHAR(150) NULL,
+  supervising_org VARCHAR(150) NULL,
   fee_type ENUM('management', 'flight', 'training') NOT NULL DEFAULT 'management',
   billing_period VARCHAR(50) NOT NULL,
   last_invoice_date DATE NOT NULL,
@@ -100,7 +103,17 @@ CREATE TABLE IF NOT EXISTS invoices (
   currency ENUM('JPY', 'MMK', 'USD') NOT NULL DEFAULT 'JPY',
   notes TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE
+  FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS invoice_lines (
+  id VARCHAR(64) PRIMARY KEY,
+  invoice_id VARCHAR(64) NOT NULL,
+  worker_id VARCHAR(64) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  UNIQUE KEY uq_invoice_line (invoice_id, worker_id),
+  KEY idx_invoice_lines_invoice (invoice_id),
+  KEY idx_invoice_lines_worker (worker_id)
 );
 
 CREATE TABLE IF NOT EXISTS invoice_payments (
@@ -155,7 +168,8 @@ CREATE TABLE IF NOT EXISTS student_financial_configs (
 CREATE TABLE IF NOT EXISTS student_invoices (
   id VARCHAR(64) PRIMARY KEY,
   invoice_no VARCHAR(30) NOT NULL UNIQUE,
-  student_id VARCHAR(64) NOT NULL,
+  student_id VARCHAR(64) NULL,
+  school_name VARCHAR(150) NULL,
   fee_type ENUM('introduction') NOT NULL DEFAULT 'introduction',
   billing_period VARCHAR(50) NOT NULL,
   last_invoice_date DATE NOT NULL,
@@ -170,7 +184,17 @@ CREATE TABLE IF NOT EXISTS student_invoices (
   currency ENUM('JPY', 'MMK', 'USD') NOT NULL DEFAULT 'JPY',
   notes TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS student_invoice_lines (
+  id VARCHAR(64) PRIMARY KEY,
+  invoice_id VARCHAR(64) NOT NULL,
+  student_id VARCHAR(64) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  UNIQUE KEY uq_student_invoice_line (invoice_id, student_id),
+  KEY idx_student_invoice_lines_invoice (invoice_id),
+  KEY idx_student_invoice_lines_student (student_id)
 );
 
 CREATE TABLE IF NOT EXISTS student_invoice_payments (
@@ -210,9 +234,11 @@ CREATE INDEX idx_invoice_payments_invoice ON invoice_payments(invoice_id);
 CREATE INDEX idx_students_status ON students(status);
 CREATE INDEX idx_student_deployments_contract ON student_deployments(contract_end_date);
 CREATE INDEX idx_student_invoices_student ON student_invoices(student_id);
+CREATE INDEX idx_student_invoices_school ON student_invoices(school_name);
 CREATE INDEX idx_student_invoices_next_date ON student_invoices(next_invoice_date);
 CREATE INDEX idx_student_invoices_status ON student_invoices(status);
 CREATE INDEX idx_student_invoice_payments_invoice ON student_invoice_payments(invoice_id);
+CREATE INDEX idx_student_invoice_lines_invoice ON student_invoice_lines(invoice_id);
 CREATE INDEX idx_fee_payments_worker ON fee_payments(worker_id);
 CREATE INDEX idx_fee_payments_type ON fee_payments(fee_type);
 

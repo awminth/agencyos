@@ -6,7 +6,7 @@ import {
   InvoiceStatus,
   StudentInvoice,
   StudentInvoicePayment,
-  StudentInvoiceWorkerSummary,
+  StudentInvoiceSchoolSummary,
 } from '../types';
 import { ArrowLeft, Banknote, Edit, Eye, Trash2, Receipt } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -18,12 +18,16 @@ import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { PrintableInvoiceModal } from './PrintableInvoiceModal';
 import { PaymentVoucherSheet } from './PaymentVoucherSheet';
 import { MobileMeta } from './MobileMeta';
+import {
+  laterDate,
+  invoiceStatusBadgeClass,
+  invoiceStatusRowClass,
+  balanceRemainClass,
+  balanceTone,
+} from '../utils/invoiceBalanceUi';
 
 function invoiceStatusClass(status: InvoiceStatus) {
-  if (status === 'Paid') return 'bg-emerald-100 text-emerald-800';
-  if (status === 'Partial') return 'bg-amber-100 text-amber-800';
-  if (status === 'Overdue') return 'bg-red-100 text-red-800';
-  return 'bg-slate-100 text-slate-700';
+  return invoiceStatusBadgeClass(status);
 }
 
 function invoiceStatusKey(status: InvoiceStatus) {
@@ -35,7 +39,7 @@ function invoiceStatusKey(status: InvoiceStatus) {
 }
 
 interface StudentFeeDetailPageProps {
-  summary: StudentInvoiceWorkerSummary;
+  summary: StudentInvoiceSchoolSummary;
   invoices: StudentInvoice[];
   currentUser: AuthUser;
   onBack: () => void;
@@ -44,47 +48,55 @@ interface StudentFeeDetailPageProps {
   onRefresh: () => Promise<void>;
 }
 
-export function buildStudentSummaries(
-  invoices: StudentInvoice[],
-  studentsById: Record<string, { serialNo?: string }>
-): StudentInvoiceWorkerSummary[] {
-  const map = new Map<string, StudentInvoiceWorkerSummary>();
+export function buildSchoolSummaries(invoices: StudentInvoice[]): StudentInvoiceSchoolSummary[] {
+  const map = new Map<string, StudentInvoiceSchoolSummary>();
   for (const invoice of invoices) {
-    const existing = map.get(invoice.studentId);
+    const schoolName = invoice.schoolName || invoice.supervisingOrg || '—';
+    const existing = map.get(schoolName);
+    const lineCount = invoice.studentCount ?? invoice.lines?.length ?? 0;
+    const payDate = invoice.paymentReceivedDate || undefined;
     if (!existing) {
-      map.set(invoice.studentId, {
-        studentId: invoice.studentId,
-        studentName: invoice.studentName,
-        passportNo: invoice.passportNo,
-        hostCompany: invoice.hostCompany,
-        serialNo: studentsById[invoice.studentId]?.serialNo,
+      map.set(schoolName, {
+        schoolName,
+        studentCount: lineCount,
         feeType: 'introduction',
         totalAmount: invoice.totalAmount || 0,
         totalPaid: invoice.amountReceived || 0,
         remainAmount: invoice.outstandingAmount || 0,
         invoiceCount: 1,
         paymentCount: invoice.amountReceived > 0 ? 1 : 0,
+        lastPaymentDate: payDate,
       });
     } else {
       existing.totalAmount += invoice.totalAmount || 0;
       existing.totalPaid += invoice.amountReceived || 0;
       existing.remainAmount += invoice.outstandingAmount || 0;
       existing.invoiceCount += 1;
+      existing.studentCount = Math.max(existing.studentCount, lineCount);
       if (invoice.amountReceived > 0) existing.paymentCount += 1;
+      existing.lastPaymentDate = laterDate(existing.lastPaymentDate, payDate);
     }
   }
-  return Array.from(map.values()).sort((a, b) => a.studentName.localeCompare(b.studentName));
+  return Array.from(map.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName));
+}
+
+/** @deprecated Use buildSchoolSummaries */
+export function buildStudentSummaries(
+  invoices: StudentInvoice[],
+  _studentsById?: Record<string, { serialNo?: string }>
+): StudentInvoiceSchoolSummary[] {
+  return buildSchoolSummaries(invoices);
 }
 
 function toSharedInvoice(invoice: StudentInvoice): Invoice {
   return {
     id: invoice.id,
     invoiceNo: invoice.invoiceNo,
-    workerId: invoice.studentId,
-    workerName: invoice.studentName,
-    passportNo: invoice.passportNo,
-    hostCompany: invoice.hostCompany,
-    supervisingOrg: invoice.supervisingOrg,
+    workerId: invoice.studentId || invoice.schoolName,
+    workerName: invoice.schoolName || invoice.studentName,
+    passportNo: invoice.passportNo || `${invoice.studentCount || invoice.lines?.length || 0} students`,
+    hostCompany: invoice.hostCompany || '',
+    supervisingOrg: invoice.schoolName || invoice.supervisingOrg,
     feeType: 'introduction' as any,
     billingPeriod: invoice.billingPeriod,
     lastInvoiceDate: invoice.lastInvoiceDate,
@@ -137,11 +149,9 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
   const canDelete = can(currentUser.permissions, 'students', 'delete');
 
   const summary = useMemo(() => {
-    const list = buildStudentSummaries(invoices, {
-      [initialSummary.studentId]: { serialNo: initialSummary.serialNo },
-    });
+    const list = buildSchoolSummaries(invoices);
     return (
-      list.find((item) => item.studentId === initialSummary.studentId) || {
+      list.find((item) => item.schoolName === initialSummary.schoolName) || {
         ...initialSummary,
         totalAmount: 0,
         totalPaid: 0,
@@ -152,7 +162,9 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
     );
   }, [invoices, initialSummary]);
 
-  const studentInvoices = invoices.filter((invoice) => invoice.studentId === summary.studentId);
+  const schoolInvoices = invoices.filter(
+    (invoice) => (invoice.schoolName || invoice.supervisingOrg) === summary.schoolName
+  );
 
   const [payments, setPayments] = useState<StudentInvoicePayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
@@ -163,7 +175,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
   const [viewSummaryVoucher, setViewSummaryVoucher] = useState(false);
 
   const paymentBalance = (payment: StudentInvoicePayment) => {
-    const invoice = studentInvoices.find((item) => item.id === payment.invoiceId);
+    const invoice = schoolInvoices.find((item) => item.id === payment.invoiceId);
     const invoiceTotal = invoice?.totalAmount ?? summary.totalAmount;
 
     const siblings = payments
@@ -195,7 +207,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
     setLoadingPayments(true);
     try {
       const res = await fetch(
-        `/api/student-invoices/by-student/payments?studentId=${encodeURIComponent(summary.studentId)}`
+        `/api/student-invoices/by-school/payments?schoolName=${encodeURIComponent(summary.schoolName)}`
       );
       const data = await res.json();
       setPayments(Array.isArray(data) ? data : []);
@@ -208,7 +220,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
 
   useEffect(() => {
     void loadPayments();
-  }, [summary.studentId, invoices]);
+  }, [summary.schoolName, invoices]);
 
   const handlePay = async (payload: Partial<InvoicePayment>) => {
     if (!payInvoice) return;
@@ -221,8 +233,11 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Pay failed');
     }
+    const created = (await res.json()) as StudentInvoicePayment;
     setPayInvoice(null);
     await onRefresh();
+    await loadPayments();
+    setViewPayment(created);
   };
 
   const handleDeletePayment = async (id: string) => {
@@ -246,11 +261,11 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
             </button>
             <div className="min-w-0">
               <h2 className="truncate text-xl font-bold tracking-tight text-slate-900">
-                {summary.studentName}
+                {summary.schoolName}
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                {t('students.introductionFee')}
-                {summary.serialNo ? ` · ${summary.serialNo}` : ''} · {summary.passportNo}
+                {t('students.introductionFee')} · {t('students.studentCount')}:{' '}
+                {summary.studentCount}
               </p>
             </div>
           </div>
@@ -265,19 +280,43 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
               {money(summary.totalAmount)}
             </p>
           </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-[10px] font-bold tracking-wider text-emerald-700/70 uppercase">
+          <div
+            className={
+              summary.remainAmount <= 0 && summary.totalAmount > 0
+                ? 'rounded-xl border-2 border-blue-500 bg-blue-100 px-4 py-3'
+                : 'rounded-xl border border-blue-200 bg-blue-50 px-4 py-3'
+            }
+          >
+            <p className="text-[10px] font-bold tracking-wider text-blue-700/80 uppercase">
               {t('invoices.totalPaid')}
             </p>
-            <p className="mt-1 font-mono text-base font-bold text-emerald-700">
+            <p className="mt-1 font-mono text-base font-bold text-blue-800">
               {money(summary.totalPaid)}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-[10px] font-bold tracking-wider text-amber-700/70 uppercase">
+          <div
+            className={
+              summary.remainAmount > 0
+                ? 'rounded-xl border-2 border-amber-400 bg-amber-100 px-4 py-3'
+                : 'rounded-xl border-2 border-blue-500 bg-blue-100 px-4 py-3'
+            }
+          >
+            <p
+              className={
+                summary.remainAmount > 0
+                  ? 'text-[10px] font-bold tracking-wider text-amber-800/80 uppercase'
+                  : 'text-[10px] font-bold tracking-wider text-blue-700/80 uppercase'
+              }
+            >
               {t('invoices.remainAmount')}
             </p>
-            <p className="mt-1 font-mono text-base font-bold text-amber-700">
+            <p
+              className={
+                summary.remainAmount > 0
+                  ? 'mt-1 font-mono text-base font-bold text-amber-900'
+                  : 'mt-1 font-mono text-base font-bold text-blue-800'
+              }
+            >
               {money(summary.remainAmount)}
             </p>
           </div>
@@ -301,17 +340,25 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
             {t('invoices.invoicesSection')}
           </h3>
         </div>
-        {studentInvoices.length === 0 ? (
+        {schoolInvoices.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-400">{t('students.feesEmpty')}</p>
         ) : (
           <>
             <div className="divide-y divide-slate-100 md:hidden">
-              {studentInvoices.map((invoice) => (
-                <div key={invoice.id} className="px-4 py-3">
+              {schoolInvoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className={`px-4 py-3 ${invoiceStatusRowClass(invoice.status)}`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-mono text-sm font-bold text-slate-900">{invoice.invoiceNo}</p>
                       <p className="text-[11px] text-slate-500">{invoice.billingPeriod}</p>
+                      {invoice.status === 'Paid' && invoice.paymentReceivedDate ? (
+                        <p className="mt-0.5 text-[11px] font-semibold text-blue-700">
+                          {t('invoices.payDate')}: {invoice.paymentReceivedDate}
+                        </p>
+                      ) : null}
                     </div>
                     <span className={`status-badge shrink-0 ${invoiceStatusClass(invoice.status)}`}>
                       {t(invoiceStatusKey(invoice.status))}
@@ -320,8 +367,8 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                   <MobileMeta
                     items={[
                       {
-                        label: t('invoices.colHost'),
-                        value: invoice.hostCompany || invoice.supervisingOrg || '—',
+                        label: t('students.studentCount'),
+                        value: String(invoice.studentCount ?? invoice.lines?.length ?? 0),
                       },
                       {
                         label: t('invoices.colDates'),
@@ -330,62 +377,58 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                       { label: t('invoices.total'), value: money(invoice.totalAmount, invoice.currency) },
                       {
                         label: t('invoices.received'),
-                        value: money(invoice.amountReceived, invoice.currency),
+                        value: (
+                          <span
+                            className={`font-semibold ${
+                              invoice.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
+                            }`}
+                          >
+                            {money(invoice.amountReceived, invoice.currency)}
+                          </span>
+                        ),
                       },
                       {
                         label: t('invoices.outstanding'),
-                        value: money(invoice.outstandingAmount, invoice.currency),
+                        value: (
+                          <span
+                            className={`font-semibold ${balanceRemainClass(
+                              balanceTone(invoice.outstandingAmount, invoice.totalAmount)
+                            )}`}
+                          >
+                            {money(invoice.outstandingAmount, invoice.currency)}
+                          </span>
+                        ),
                       },
-                      {
-                        label: t('invoices.colReceipt'),
-                        value: invoice.receiptNo
-                          ? `${invoice.receiptNo}${invoice.paymentReceivedDate ? ` (${invoice.paymentReceivedDate})` : ''}`
-                          : '—',
-                      },
-                      ...(invoice.receiptSentDate
-                        ? [{ label: t('invoices.receiptSentDate'), value: invoice.receiptSentDate }]
-                        : []),
-                      ...(invoice.notes ? [{ label: t('workerDetail.notesTitle'), value: invoice.notes }] : []),
                     ]}
                   />
+                  {(invoice.lines?.length || 0) > 0 && (
+                    <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] text-slate-600">
+                      {invoice.lines?.map((line) => (
+                        <div key={line.id || line.studentId} className="flex justify-between gap-2 py-0.5">
+                          <span>{line.studentName}</span>
+                          <span className="font-mono">{money(line.amount, invoice.currency)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="action-group mt-2">
                     {canRead && (
-                      <button
-                        type="button"
-                        className="action-btn"
-                        title={t('common.view')}
-                        onClick={() => setViewInvoice(invoice)}
-                      >
+                      <button type="button" className="action-btn" title={t('common.view')} onClick={() => setViewInvoice(invoice)}>
                         <Eye className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canUpdate && (
-                      <button
-                        type="button"
-                        className="action-btn action-btn-blue"
-                        title={t('invoices.pay')}
-                        onClick={() => setPayInvoice(invoice)}
-                      >
+                      <button type="button" className="action-btn action-btn-blue" title={t('invoices.pay')} onClick={() => setPayInvoice(invoice)}>
                         <Banknote className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canUpdate && (
-                      <button
-                        type="button"
-                        className="action-btn"
-                        title={t('common.edit')}
-                        onClick={() => onEditInvoice(invoice)}
-                      >
+                      <button type="button" className="action-btn" title={t('common.edit')} onClick={() => onEditInvoice(invoice)}>
                         <Edit className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canDelete && (
-                      <button
-                        type="button"
-                        className="action-btn action-btn-red"
-                        title={t('common.delete')}
-                        onClick={() => onDeleteInvoice(invoice.id)}
-                      >
+                      <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => onDeleteInvoice(invoice.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -399,7 +442,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                 <thead>
                   <tr>
                     <th>{t('invoices.colInvoice')}</th>
-                    <th>{t('invoices.colHost')}</th>
+                    <th className="text-center">{t('students.studentCount')}</th>
                     <th>{t('invoices.colDates')}</th>
                     <th className="text-right">{t('invoices.colAmount')}</th>
                     <th>{t('invoices.colReceipt')}</th>
@@ -408,19 +451,21 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {studentInvoices.map((invoice) => (
-                    <tr key={invoice.id}>
+                  {schoolInvoices.map((invoice) => (
+                    <tr key={invoice.id} className={invoiceStatusRowClass(invoice.status)}>
                       <td>
                         <div className="cell-stack">
                           <span className="cell-id">{invoice.invoiceNo}</span>
                           <span className="cell-secondary">{invoice.billingPeriod}</span>
+                          {invoice.status === 'Paid' && invoice.paymentReceivedDate ? (
+                            <span className="text-[11px] font-semibold text-blue-700">
+                              {t('invoices.payDate')}: {invoice.paymentReceivedDate}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
-                      <td>
-                        <div className="cell-stack">
-                          <span className="cell-primary">{invoice.hostCompany || '—'}</span>
-                          <span className="cell-secondary">{invoice.supervisingOrg || '—'}</span>
-                        </div>
+                      <td className="text-center">
+                        <span className="cell-mono">{invoice.studentCount ?? invoice.lines?.length ?? 0}</span>
                       </td>
                       <td>
                         <div className="cell-stack">
@@ -435,10 +480,18 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                       <td className="text-right">
                         <div className="cell-stack items-end">
                           <span className="cell-mono">{money(invoice.totalAmount, invoice.currency)}</span>
-                          <span className="cell-mono text-emerald-600">
+                          <span
+                            className={`cell-mono ${
+                              invoice.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
+                            }`}
+                          >
                             {money(invoice.amountReceived, invoice.currency)}
                           </span>
-                          <span className="cell-mono font-semibold text-amber-700">
+                          <span
+                            className={`cell-mono font-semibold ${balanceRemainClass(
+                              balanceTone(invoice.outstandingAmount, invoice.totalAmount)
+                            )}`}
+                          >
                             {money(invoice.outstandingAmount, invoice.currency)}
                           </span>
                         </div>
@@ -459,42 +512,22 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                       <td className="text-right">
                         <div className="action-group justify-end">
                           {canRead && (
-                            <button
-                              type="button"
-                              className="action-btn"
-                              title={t('common.view')}
-                              onClick={() => setViewInvoice(invoice)}
-                            >
+                            <button type="button" className="action-btn" title={t('common.view')} onClick={() => setViewInvoice(invoice)}>
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {canUpdate && (
-                            <button
-                              type="button"
-                              className="action-btn action-btn-blue"
-                              title={t('invoices.pay')}
-                              onClick={() => setPayInvoice(invoice)}
-                            >
+                            <button type="button" className="action-btn action-btn-blue" title={t('invoices.pay')} onClick={() => setPayInvoice(invoice)}>
                               <Banknote className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {canUpdate && (
-                            <button
-                              type="button"
-                              className="action-btn"
-                              title={t('common.edit')}
-                              onClick={() => onEditInvoice(invoice)}
-                            >
+                            <button type="button" className="action-btn" title={t('common.edit')} onClick={() => onEditInvoice(invoice)}>
                               <Edit className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {canDelete && (
-                            <button
-                              type="button"
-                              className="action-btn action-btn-red"
-                              title={t('common.delete')}
-                              onClick={() => onDeleteInvoice(invoice.id)}
-                            >
+                            <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => onDeleteInvoice(invoice.id)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
@@ -534,29 +567,15 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                         { label: t('invoices.payDate'), value: payment.paymentDate || '—' },
                         { label: t('invoices.colInvoice'), value: payment.invoiceNo || '—' },
                         { label: t('invoices.colReceipt'), value: payment.receiptNo || '—' },
-                        {
-                          label: t('invoices.outstanding'),
-                          value: money(bal.remainAmount, payment.currency),
-                        },
-                        ...(payment.notes ? [{ label: t('workerDetail.notesTitle'), value: payment.notes }] : []),
+                        { label: t('invoices.outstanding'), value: money(bal.remainAmount, payment.currency) },
                       ]}
                     />
                     <div className="action-group mt-2">
-                      <button
-                        type="button"
-                        className="action-btn"
-                        title={t('invoices.viewVoucher')}
-                        onClick={() => setViewPayment(payment)}
-                      >
+                      <button type="button" className="action-btn" title={t('invoices.viewVoucher')} onClick={() => setViewPayment(payment)}>
                         <Eye className="h-3.5 w-3.5" />
                       </button>
                       {canDelete && (
-                        <button
-                          type="button"
-                          className="action-btn action-btn-red"
-                          title={t('common.delete')}
-                          onClick={() => handleDeletePayment(payment.id)}
-                        >
+                        <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => handleDeletePayment(payment.id)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -587,43 +606,24 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                           <span className="cell-secondary">{payment.paymentDate || '—'}</span>
                         </td>
                         <td>
-                          <div className="cell-stack">
-                            <span className="cell-id">{payment.invoiceNo || '—'}</span>
-                            {payment.notes ? (
-                              <span className="cell-secondary truncate max-w-[220px]">{payment.notes}</span>
-                            ) : null}
-                          </div>
+                          <span className="cell-id">{payment.invoiceNo || '—'}</span>
                         </td>
                         <td className="text-right">
-                          <span className="cell-mono font-semibold text-emerald-700">
-                            {money(payment.amount, payment.currency)}
-                          </span>
+                          <span className="cell-mono font-semibold">{money(payment.amount, payment.currency)}</span>
                         </td>
                         <td>
                           <span className="cell-secondary">{payment.receiptNo || '—'}</span>
                         </td>
                         <td className="text-right">
-                          <span className="cell-mono text-amber-700">
-                            {money(bal.remainAmount, payment.currency)}
-                          </span>
+                          <span className="cell-mono text-amber-700">{money(bal.remainAmount, payment.currency)}</span>
                         </td>
                         <td className="text-right">
                           <div className="action-group justify-end">
-                            <button
-                              type="button"
-                              className="action-btn"
-                              title={t('invoices.viewVoucher')}
-                              onClick={() => setViewPayment(payment)}
-                            >
+                            <button type="button" className="action-btn" title={t('invoices.viewVoucher')} onClick={() => setViewPayment(payment)}>
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                             {canDelete && (
-                              <button
-                                type="button"
-                                className="action-btn action-btn-red"
-                                title={t('common.delete')}
-                                onClick={() => handleDeletePayment(payment.id)}
-                              >
+                              <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => handleDeletePayment(payment.id)}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )}
@@ -641,32 +641,29 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
 
       {payInvoice && (
         <InvoicePayModal
-          invoice={toSharedInvoice(studentInvoices.find((item) => item.id === payInvoice.id) || payInvoice)}
+          invoice={toSharedInvoice(payInvoice)}
           onClose={() => setPayInvoice(null)}
           onSubmit={handlePay}
         />
       )}
       {viewInvoice && (
         <InvoiceDetailSheet
-          invoice={toSharedInvoice(studentInvoices.find((item) => item.id === viewInvoice.id) || viewInvoice)}
+          invoice={toSharedInvoice(viewInvoice)}
           canRead={canRead}
           canUpdate={canUpdate}
           canDelete={canDelete}
           onClose={() => setViewInvoice(null)}
           onPrint={() => {
-            const invoice = studentInvoices.find((item) => item.id === viewInvoice.id) || viewInvoice;
+            setPrintableInvoice(viewInvoice);
             setViewInvoice(null);
-            setPrintableInvoice(invoice);
           }}
           onEdit={() => {
-            const invoice = studentInvoices.find((item) => item.id === viewInvoice.id) || viewInvoice;
+            onEditInvoice(viewInvoice);
             setViewInvoice(null);
-            onEditInvoice(invoice);
           }}
           onDelete={() => {
-            const id = viewInvoice.id;
+            void onDeleteInvoice(viewInvoice.id);
             setViewInvoice(null);
-            void onDeleteInvoice(id);
           }}
         />
       )}
@@ -687,10 +684,9 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
       {viewSummaryVoucher && (
         <PaymentVoucherSheet
           mode="summary"
-          workerName={summary.studentName}
-          passportNo={summary.passportNo}
-          hostCompany={summary.hostCompany}
-          serialNo={summary.serialNo}
+          workerName={summary.schoolName}
+          hostCompany={summary.schoolName}
+          supervisingOrg={summary.schoolName}
           feeType={'introduction' as any}
           totalAmount={summary.totalAmount}
           totalPaid={summary.totalPaid}

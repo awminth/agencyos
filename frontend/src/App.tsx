@@ -15,7 +15,7 @@ import {
   InvoiceWorkerSummary,
   Student,
   StudentInvoice,
-  StudentInvoiceWorkerSummary,
+  StudentInvoiceSchoolSummary,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveTab } from './components/Sidebar';
@@ -41,7 +41,7 @@ import { StudentFormPage } from './components/StudentFormPage';
 import { StudentManagement } from './components/StudentManagement';
 import { StudentInvoiceManagement } from './components/StudentInvoiceManagement';
 import { StudentInvoiceFormPage } from './components/StudentInvoiceFormPage';
-import { StudentFeeDetailPage, buildStudentSummaries } from './components/StudentFeeDetailPage';
+import { StudentFeeDetailPage, buildSchoolSummaries } from './components/StudentFeeDetailPage';
 import { StudentDetailModal } from './components/StudentDetailModal';
 import type { ReportSection } from './types/reports';
 import {
@@ -67,7 +67,7 @@ type FormPage =
   | { kind: 'invoiceWorker'; summary: InvoiceWorkerSummary }
   | { kind: 'student'; student: Student | null }
   | { kind: 'studentInvoice'; invoice: StudentInvoice | null }
-  | { kind: 'studentFee'; summary: StudentInvoiceWorkerSummary };
+  | { kind: 'studentFee'; summary: StudentInvoiceSchoolSummary };
 
 function normalizeStoredUser(raw: unknown): AuthUser | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -151,10 +151,13 @@ export default function App() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingStudentInvoice, setEditingStudentInvoice] = useState<StudentInvoice | null>(null);
   const [createInvoiceFeeType, setCreateInvoiceFeeType] = useState<InvoiceFeeType>('management');
-  const [createPreferredWorkerId, setCreatePreferredWorkerId] = useState<string | undefined>();
+  const [createPreferredHostCompany, setCreatePreferredHostCompany] = useState<string | undefined>();
+  const [createPreferredSupervisingOrg, setCreatePreferredSupervisingOrg] = useState<
+    string | undefined
+  >();
   const [invoiceWorkerReturn, setInvoiceWorkerReturn] = useState<InvoiceWorkerSummary | null>(null);
-  const [createPreferredStudentId, setCreatePreferredStudentId] = useState<string | undefined>();
-  const [studentFeeReturn, setStudentFeeReturn] = useState<StudentInvoiceWorkerSummary | null>(null);
+  const [createPreferredSchoolName, setCreatePreferredSchoolName] = useState<string | undefined>();
+  const [studentFeeReturn, setStudentFeeReturn] = useState<StudentInvoiceSchoolSummary | null>(null);
   const [printableInvoice, setPrintableInvoice] = useState<Invoice | null>(null);
   const [selectedDetailWorker, setSelectedDetailWorker] = useState<Worker | null>(null);
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<Student | null>(null);
@@ -168,7 +171,7 @@ export default function App() {
     setEditingStudentInvoice(null);
     setInvoiceWorkerReturn(null);
     setStudentFeeReturn(null);
-    setCreatePreferredStudentId(undefined);
+    setCreatePreferredSchoolName(undefined);
     setActiveTab(tab);
   };
 
@@ -521,20 +524,12 @@ export default function App() {
   };
 
   const handleOpenStudentFeeForStudent = (student: Student) => {
-    const summaries = buildStudentSummaries(
-      studentInvoices,
-      students.reduce<Record<string, { serialNo?: string }>>((acc, item) => {
-        acc[item.id] = { serialNo: item.serialNo };
-        return acc;
-      }, {})
-    );
+    const schoolName = student.deployment.supervisingOrg || '';
+    const summaries = buildSchoolSummaries(studentInvoices);
     const summary =
-      summaries.find((item) => item.studentId === student.id) || {
-        studentId: student.id,
-        studentName: student.name,
-        passportNo: student.passportNo,
-        hostCompany: student.deployment.hostCompany,
-        serialNo: student.serialNo,
+      summaries.find((item) => item.schoolName === schoolName) || {
+        schoolName: schoolName || '—',
+        studentCount: 1,
         feeType: 'introduction' as const,
         totalAmount: 0,
         totalPaid: 0,
@@ -565,7 +560,8 @@ export default function App() {
       await parseApiResponse(res);
       const returnTo = invoiceWorkerReturn;
       setEditingInvoice(null);
-      setCreatePreferredWorkerId(undefined);
+      setCreatePreferredHostCompany(undefined);
+      setCreatePreferredSupervisingOrg(undefined);
       setInvoiceWorkerReturn(null);
       setFormPage(returnTo ? { kind: 'invoiceWorker', summary: returnTo } : null);
       await refreshAllData();
@@ -618,7 +614,7 @@ export default function App() {
       await parseApiResponse(res);
       const returnTo = studentFeeReturn;
       setEditingStudentInvoice(null);
-      setCreatePreferredStudentId(undefined);
+      setCreatePreferredSchoolName(undefined);
       setStudentFeeReturn(null);
       setFormPage(returnTo ? { kind: 'studentFee', summary: returnTo } : null);
       await refreshAllData();
@@ -797,11 +793,17 @@ export default function App() {
               invoice={formPage.invoice}
               workers={workers}
               defaultFeeType={formPage.invoice?.feeType || createInvoiceFeeType}
-              preferredWorkerId={formPage.invoice?.workerId || createPreferredWorkerId}
+              preferredHostCompany={
+                formPage.invoice?.hostCompany || createPreferredHostCompany
+              }
+              preferredSupervisingOrg={
+                formPage.invoice?.supervisingOrg || createPreferredSupervisingOrg
+              }
               onBack={() => {
                 const returnTo = invoiceWorkerReturn;
                 setEditingInvoice(null);
-                setCreatePreferredWorkerId(undefined);
+                setCreatePreferredHostCompany(undefined);
+                setCreatePreferredSupervisingOrg(undefined);
                 setInvoiceWorkerReturn(null);
                 setFormPage(returnTo ? { kind: 'invoiceWorker', summary: returnTo } : null);
               }}
@@ -811,11 +813,15 @@ export default function App() {
             <StudentInvoiceFormPage
               invoice={formPage.invoice}
               students={students}
-              preferredStudentId={formPage.invoice?.studentId || createPreferredStudentId}
+              preferredSchoolName={
+                formPage.invoice?.schoolName ||
+                formPage.invoice?.supervisingOrg ||
+                createPreferredSchoolName
+              }
               onBack={() => {
                 const returnTo = studentFeeReturn;
                 setEditingStudentInvoice(null);
-                setCreatePreferredStudentId(undefined);
+                setCreatePreferredSchoolName(undefined);
                 setStudentFeeReturn(null);
                 setFormPage(returnTo ? { kind: 'studentFee', summary: returnTo } : null);
               }}
@@ -945,13 +951,13 @@ export default function App() {
                       invoices={studentInvoices}
                       students={students}
                       currentUser={currentUser}
-                      onOpenCreateModal={(studentId) => {
-                        setCreatePreferredStudentId(studentId);
+                      onOpenCreateModal={(schoolName) => {
+                        setCreatePreferredSchoolName(schoolName);
                         setStudentFeeReturn(null);
                         setEditingStudentInvoice(null);
                         setFormPage({ kind: 'studentInvoice', invoice: null });
                       }}
-                      onOpenStudentDetail={(summary) => {
+                      onOpenSchoolDetail={(summary) => {
                         setStudentsView('fees');
                         setFormPage({ kind: 'studentFee', summary });
                       }}
@@ -986,9 +992,10 @@ export default function App() {
                   currentUser={currentUser}
                   feeTab={createInvoiceFeeType}
                   onFeeTabChange={setCreateInvoiceFeeType}
-                  onOpenCreateModal={(feeType, workerId) => {
+                  onOpenCreateModal={(feeType, preferred) => {
                     setCreateInvoiceFeeType(feeType);
-                    setCreatePreferredWorkerId(workerId);
+                    setCreatePreferredHostCompany(preferred?.hostCompany);
+                    setCreatePreferredSupervisingOrg(preferred?.supervisingOrg);
                     setInvoiceWorkerReturn(null);
                     setEditingInvoice(null);
                     setFormPage({ kind: 'invoice', invoice: null });

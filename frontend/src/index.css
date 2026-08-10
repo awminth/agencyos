@@ -165,6 +165,47 @@ body {
     background-color: #1e293b;
   }
 
+  /* Fee Paid/Partial rows — keep status color on hover (no slate flash) */
+  .data-table tbody tr.fee-status-row-paid,
+  .data-table tbody tr.fee-status-row-paid:hover {
+    background-color: #dbeafe;
+  }
+
+  .data-table tbody tr.fee-status-row-remain,
+  .data-table tbody tr.fee-status-row-remain:hover {
+    background-color: #fef3c7;
+  }
+
+  .dark .data-table tbody tr.fee-status-row-paid,
+  .dark .data-table tbody tr.fee-status-row-paid:hover {
+    background-color: #1e3a8a;
+  }
+
+  .dark .data-table tbody tr.fee-status-row-remain,
+  .dark .data-table tbody tr.fee-status-row-remain:hover {
+    background-color: #78350f;
+  }
+
+  .mobile-list-row.fee-status-row-paid,
+  .mobile-list-row.fee-status-row-paid:hover {
+    background-color: #dbeafe;
+  }
+
+  .mobile-list-row.fee-status-row-remain,
+  .mobile-list-row.fee-status-row-remain:hover {
+    background-color: #fef3c7;
+  }
+
+  .dark .mobile-list-row.fee-status-row-paid,
+  .dark .mobile-list-row.fee-status-row-paid:hover {
+    background-color: #1e3a8a;
+  }
+
+  .dark .mobile-list-row.fee-status-row-remain,
+  .dark .mobile-list-row.fee-status-row-remain:hover {
+    background-color: #78350f;
+  }
+
   .data-table tbody tr:last-child td {
     border-bottom: none;
   }

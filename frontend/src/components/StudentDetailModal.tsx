@@ -29,7 +29,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const { t } = useLanguage();
   const money = (amount: number, currency?: string) =>
     formatMoney(amount, (currency as MoneyCurrency) || 'JPY');
-  const studentInvoices = invoices.filter((invoice) => invoice.studentId === student.id);
+  const studentInvoices = invoices.filter(
+    (invoice) =>
+      invoice.studentId === student.id ||
+      invoice.lines?.some((line) => line.studentId === student.id)
+  );
   const totalBilled = studentInvoices.reduce((sum, invoice) => sum + (invoice.totalAmount || 0), 0);
   const totalPaid = studentInvoices.reduce((sum, invoice) => sum + (invoice.amountReceived || 0), 0);
   const totalRemain = studentInvoices.reduce(
@@ -116,27 +120,15 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 <span className="font-bold text-blue-700">{student.deployment.visaType || notAvailable}</span>
               </div>
               <div>
-                <span className="block text-slate-500">{t('workerModal.job')}:</span>
+                <span className="block text-slate-500">{t('students.schoolName')}:</span>
                 <span className="font-semibold break-words text-slate-800">
-                  {student.deployment.jobCategory || notAvailable}
-                </span>
-              </div>
-              <div>
-                <span className="block text-slate-500">{t('workerModal.host')}:</span>
-                <span className="font-semibold break-words text-slate-800">
-                  {student.deployment.hostCompany || notAvailable}
-                </span>
-              </div>
-              <div>
-                <span className="block text-slate-500">{t('workerModal.org')}:</span>
-                <span className="break-words text-slate-700">
                   {student.deployment.supervisingOrg || notAvailable}
                 </span>
               </div>
-              <div>
-                <span className="block text-slate-500">{t('workerModal.ownCard')}:</span>
-                <span className="font-mono text-slate-700">
-                  {student.deployment.ownCardDate || notAvailable}
+              <div className="col-span-2 sm:col-span-3">
+                <span className="block text-slate-500">{t('students.schoolAddress')}:</span>
+                <span className="break-words text-slate-700">
+                  {student.deployment.hostCompany || notAvailable}
                 </span>
               </div>
               <div>
@@ -149,12 +141,6 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 <span className="block text-slate-500">{t('workerModal.entry')}:</span>
                 <span className="font-mono text-slate-700">
                   {student.deployment.japanEntryDate || notAvailable}
-                </span>
-              </div>
-              <div>
-                <span className="block text-slate-500">{t('workerModal.contractEnd')}:</span>
-                <span className="font-mono font-bold text-amber-700">
-                  {student.deployment.contractEndDate || notAvailable}
                 </span>
               </div>
             </div>

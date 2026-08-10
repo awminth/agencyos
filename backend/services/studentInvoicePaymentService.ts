@@ -120,10 +120,11 @@ export async function listStudentPaymentsByInvoice(
 ): Promise<StudentInvoicePayment[]> {
   await ensureStudentInvoicePaymentsTable();
   const [rows] = await pool.query<StudentPaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type, s.name AS student_name
+    `SELECT p.*, i.invoice_no, i.student_id, i.school_name, i.fee_type,
+            COALESCE(s.name, i.school_name) AS student_name
      FROM student_invoice_payments p
      JOIN student_invoices i ON i.id = p.invoice_id
-     JOIN students s ON s.id = i.student_id
+     LEFT JOIN students s ON s.id = i.student_id
      WHERE p.invoice_id = :invoiceId
      ORDER BY p.payment_date DESC, p.created_at DESC`,
     { invoiceId }
@@ -136,13 +137,38 @@ export async function listStudentPaymentsByStudent(
 ): Promise<StudentInvoicePayment[]> {
   await ensureStudentInvoicePaymentsTable();
   const [rows] = await pool.query<StudentPaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type, s.name AS student_name
+    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type,
+            COALESCE(s.name, i.school_name) AS student_name
      FROM student_invoice_payments p
      JOIN student_invoices i ON i.id = p.invoice_id
-     JOIN students s ON s.id = i.student_id
-     WHERE i.student_id = :studentId AND i.fee_type = 'introduction'
+     LEFT JOIN students s ON s.id = i.student_id
+     WHERE i.fee_type = 'introduction'
+       AND (
+         i.student_id = :studentId
+         OR EXISTS (
+           SELECT 1 FROM student_invoice_lines l
+           WHERE l.invoice_id = i.id AND l.student_id = :studentId
+         )
+       )
      ORDER BY p.payment_date DESC, p.created_at DESC`,
     { studentId }
+  );
+  return rows.map(mapPayment);
+}
+
+export async function listStudentPaymentsBySchool(
+  schoolName: string
+): Promise<StudentInvoicePayment[]> {
+  await ensureStudentInvoicePaymentsTable();
+  const [rows] = await pool.query<StudentPaymentRow[]>(
+    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type,
+            COALESCE(i.school_name, s.name) AS student_name
+     FROM student_invoice_payments p
+     JOIN student_invoices i ON i.id = p.invoice_id
+     LEFT JOIN students s ON s.id = i.student_id
+     WHERE i.school_name = :schoolName AND i.fee_type = 'introduction'
+     ORDER BY p.payment_date DESC, p.created_at DESC`,
+    { schoolName }
   );
   return rows.map(mapPayment);
 }
@@ -150,10 +176,11 @@ export async function listStudentPaymentsByStudent(
 export async function getStudentPaymentById(id: string): Promise<StudentInvoicePayment> {
   await ensureStudentInvoicePaymentsTable();
   const [rows] = await pool.query<StudentPaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type, s.name AS student_name
+    `SELECT p.*, i.invoice_no, i.student_id, i.fee_type,
+            COALESCE(s.name, i.school_name) AS student_name
      FROM student_invoice_payments p
      JOIN student_invoices i ON i.id = p.invoice_id
-     JOIN students s ON s.id = i.student_id
+     LEFT JOIN students s ON s.id = i.student_id
      WHERE p.id = :id
      LIMIT 1`,
     { id }

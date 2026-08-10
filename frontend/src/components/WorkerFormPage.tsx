@@ -10,6 +10,7 @@ interface SystemVariable {
   id: string;
   category: string;
   value: string;
+  parentValue?: string | null;
 }
 
 interface WorkerFormPageProps {
@@ -55,7 +56,7 @@ export const WorkerFormPage: React.FC<WorkerFormPageProps> = ({ worker, onBack, 
 
   const [visaOptions, setVisaOptions] = useState<string[]>([]);
   const [orgOptions, setOrgOptions] = useState<string[]>([]);
-  const [hostOptions, setHostOptions] = useState<string[]>([]);
+  const [hostVars, setHostVars] = useState<SystemVariable[]>([]);
   const [jobOptions, setJobOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -66,7 +67,7 @@ export const WorkerFormPage: React.FC<WorkerFormPageProps> = ({ worker, onBack, 
         if (!Array.isArray(rows)) return;
         setVisaOptions(rows.filter((v) => v.category === 'visa_type').map((v) => v.value));
         setOrgOptions(rows.filter((v) => v.category === 'supervising_org').map((v) => v.value));
-        setHostOptions(rows.filter((v) => v.category === 'host_company').map((v) => v.value));
+        setHostVars(rows.filter((v) => v.category === 'host_company'));
         setJobOptions(rows.filter((v) => v.category === 'job_category').map((v) => v.value));
       })
       .catch(() => undefined);
@@ -76,6 +77,15 @@ export const WorkerFormPage: React.FC<WorkerFormPageProps> = ({ worker, onBack, 
     if (current && !options.includes(current)) return [current, ...options];
     return options;
   };
+
+  const hostOptions = (() => {
+    const filtered = supervisingOrg
+      ? hostVars
+          .filter((v) => !v.parentValue || v.parentValue === supervisingOrg)
+          .map((v) => v.value)
+      : hostVars.map((v) => v.value);
+    return withCurrent(filtered, hostCompany);
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,16 +226,30 @@ export const WorkerFormPage: React.FC<WorkerFormPageProps> = ({ worker, onBack, 
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">ကြီးကြပ်ရေးအဖွဲ့ *</label>
-              <select required value={supervisingOrg} onChange={(e) => setSupervisingOrg(e.target.value)} className={selectClass}>
+              <select
+                required
+                value={supervisingOrg}
+                onChange={(e) => {
+                  setSupervisingOrg(e.target.value);
+                  setHostCompany('');
+                }}
+                className={selectClass}
+              >
                 <option value="">— ရွေးပါ —</option>
                 {withCurrent(orgOptions, supervisingOrg).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Host Company *</label>
-              <select required value={hostCompany} onChange={(e) => setHostCompany(e.target.value)} className={selectClass}>
+              <select
+                required
+                value={hostCompany}
+                onChange={(e) => setHostCompany(e.target.value)}
+                className={selectClass}
+                disabled={!supervisingOrg}
+              >
                 <option value="">— ရွေးပါ —</option>
-                {withCurrent(hostOptions, hostCompany).map((v) => <option key={v} value={v}>{v}</option>)}
+                {hostOptions.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>

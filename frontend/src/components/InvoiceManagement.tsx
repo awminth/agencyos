@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Invoice, InvoiceFeeType, AuthUser, Worker, InvoiceWorkerSummary } from '../types';
-import { Receipt, Plus, Search, ChevronRight, Briefcase, Plane, GraduationCap } from 'lucide-react';
+import { Receipt, Plus, Search, ChevronRight, Briefcase, Plane, GraduationCap, Building2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import type { MoneyCurrency } from '../utils/currency';
@@ -11,6 +11,14 @@ import { can } from '../utils/permissions';
 import { MobileFilterToggle } from './MobileFilterToggle';
 import { MobileMeta } from './MobileMeta';
 import { buildWorkerSummaries } from './WorkerFeeDetailModal';
+import {
+  balanceTone,
+  balanceRowClass,
+  balanceBadgeClass,
+  balanceRemainClass,
+  balancePaidAmountClass,
+  balanceStatusKey,
+} from '../utils/invoiceBalanceUi';
 
 interface InvoiceManagementProps {
   invoices: Invoice[];
@@ -18,7 +26,10 @@ interface InvoiceManagementProps {
   currentUser: AuthUser;
   feeTab: InvoiceFeeType;
   onFeeTabChange: (feeType: InvoiceFeeType) => void;
-  onOpenCreateModal: (feeType: InvoiceFeeType, workerId?: string) => void;
+  onOpenCreateModal: (
+    feeType: InvoiceFeeType,
+    preferred?: { hostCompany?: string; supervisingOrg?: string }
+  ) => void;
   onOpenWorkerDetail: (summary: InvoiceWorkerSummary) => void;
 }
 
@@ -27,6 +38,10 @@ const FEE_TABS: { id: InvoiceFeeType; icon: typeof Briefcase }[] = [
   { id: 'flight', icon: Plane },
   { id: 'training', icon: GraduationCap },
 ];
+
+function summaryKey(s: InvoiceWorkerSummary) {
+  return `${s.hostCompany}||${s.supervisingOrg || ''}`;
+}
 
 export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
   invoices,
@@ -49,15 +64,19 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
   const [remainFilter, setRemainFilter] = useState<'ALL' | 'REMAIN' | 'PAID'>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const workersById = useMemo(() => {
-    const map: Record<string, { serialNo?: string }> = {};
-    for (const w of workers) map[w.id] = { serialNo: w.serialNo };
+  const hostWorkerCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const w of workers) {
+      const host = w.deployment?.hostCompany || '';
+      if (!host) continue;
+      map.set(host, (map.get(host) || 0) + 1);
+    }
     return map;
   }, [workers]);
 
   const summaries = useMemo(
-    () => buildWorkerSummaries(invoices, feeTab, workersById),
-    [invoices, feeTab, workersById]
+    () => buildWorkerSummaries(invoices, feeTab),
+    [invoices, feeTab]
   );
 
   const filtered = useMemo(() => {
@@ -65,10 +84,8 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
     return summaries.filter((s) => {
       const matchSearch =
         !q ||
-        s.workerName.toLowerCase().includes(q) ||
-        s.passportNo.toLowerCase().includes(q) ||
         s.hostCompany.toLowerCase().includes(q) ||
-        (s.serialNo || '').toLowerCase().includes(q);
+        (s.supervisingOrg || '').toLowerCase().includes(q);
       const matchRemain =
         remainFilter === 'ALL' ||
         (remainFilter === 'REMAIN' && s.remainAmount > 0) ||
@@ -100,10 +117,9 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
         : t('workerModal.managementFee');
 
   const exportHeaders = [
-    'Worker',
-    'Serial',
-    'Passport',
-    'Host',
+    'Host Company',
+    'Supervising Org',
+    'Workers',
     'Fee Type',
     `Total (${currencyLabel})`,
     `Paid (${currencyLabel})`,
@@ -111,10 +127,9 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
     'Invoices',
   ];
   const exportRows = filtered.map((s) => [
-    s.workerName,
-    s.serialNo || '',
-    s.passportNo,
     s.hostCompany,
+    s.supervisingOrg || '',
+    hostWorkerCounts.get(s.hostCompany) || s.workerCount,
     feeLabel(s.feeType),
     money(s.totalAmount),
     money(s.totalPaid),
@@ -138,7 +153,7 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <ExportButtons
               onExcel={() =>
-                exportToExcel('Invoices_By_Worker', 'Invoices', exportHeaders, exportRows, {
+                exportToExcel('Invoices_By_Host', 'Invoices', exportHeaders, exportRows, {
                   title: `${t('invoices.title')} — ${feeLabel(feeTab)}`,
                 })
               }
@@ -159,6 +174,14 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
               </button>
             )}
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-xs text-slate-600">
+          <div className="inline-flex items-center gap-1.5 font-semibold text-blue-700">
+            <Building2 className="h-4 w-4" />
+            {feeLabel(feeTab)}
+          </div>
+          <p className="mt-1">{t('invoices.hostInvoiceHint')}</p>
         </div>
 
         <div className="-mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 pb-1 md:flex-wrap">
@@ -192,7 +215,7 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
             <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder={t('invoices.searchWorker')}
+              placeholder={t('invoices.searchHost')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-3 pl-9 text-xs text-slate-900 focus:border-blue-600 focus:outline-none sm:text-sm"
@@ -213,34 +236,62 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
       <div className="bento-card overflow-hidden">
         <div className="divide-y divide-slate-100 md:hidden">
           {pagedItems.length === 0 ? (
-            <p className="px-4 py-10 text-center text-sm text-slate-400">{t('invoices.emptyWorkers')}</p>
+            <p className="px-4 py-10 text-center text-sm text-slate-400">{t('invoices.emptyHosts')}</p>
           ) : (
-            pagedItems.map((s) => (
+            pagedItems.map((s) => {
+              const tone = balanceTone(s.remainAmount, s.totalAmount);
+              return (
               <button
-                key={s.workerId}
+                key={summaryKey(s)}
                 type="button"
                 onClick={() => onOpenWorkerDetail(s)}
-                className="mobile-list-row w-full cursor-pointer text-left"
+                className={`mobile-list-row w-full cursor-pointer text-left ${balanceRowClass(tone)}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900">{s.workerName}</p>
-                    <p className="mt-0.5 font-mono text-[11px] text-blue-600">
-                      {s.serialNo || s.passportNo}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900">{s.hostCompany}</p>
+                      <span className={`status-badge shrink-0 text-[10px] font-bold ${balanceBadgeClass(tone)}`}>
+                        {t(balanceStatusKey(tone, s.totalPaid))}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {s.supervisingOrg || '—'} · {t('invoices.workerCount')}:{' '}
+                      {hostWorkerCounts.get(s.hostCompany) || s.workerCount}
                     </p>
+                    {tone === 'paid' && s.lastPaymentDate ? (
+                      <p className="mt-0.5 text-[11px] font-semibold text-blue-700">
+                        {t('invoices.payDate')}: {s.lastPaymentDate}
+                      </p>
+                    ) : null}
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
                 </div>
                 <MobileMeta
                   items={[
                     { label: t('invoices.totalAmount'), value: money(s.totalAmount) },
-                    { label: t('invoices.totalPaid'), value: money(s.totalPaid) },
-                    { label: t('invoices.remainAmount'), value: money(s.remainAmount) },
+                    {
+                      label: t('invoices.totalPaid'),
+                      value: (
+                        <span className={`font-semibold ${balancePaidAmountClass(tone)}`}>
+                          {money(s.totalPaid)}
+                        </span>
+                      ),
+                    },
+                    {
+                      label: t('invoices.remainAmount'),
+                      value: (
+                        <span className={`font-semibold ${balanceRemainClass(tone)}`}>
+                          {money(s.remainAmount)}
+                        </span>
+                      ),
+                    },
                     { label: t('invoices.invoiceCount'), value: String(s.invoiceCount) },
                   ]}
                 />
               </button>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -248,11 +299,14 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t('invoices.colWorker')}</th>
-                    <th>{t('invoices.colHost')}</th>
+                <th>{t('invoices.colHost')}</th>
+                <th>{t('reports.colSupervisingOrg')}</th>
+                <th className="text-center">{t('invoices.workerCount')}</th>
                 <th className="text-right">{t('invoices.totalAmount')}</th>
                 <th className="text-right">{t('invoices.totalPaid')}</th>
                 <th className="text-right">{t('invoices.remainAmount')}</th>
+                <th className="text-center">{t('common.status')}</th>
+                <th className="text-center">{t('invoices.payDate')}</th>
                 <th className="text-center">{t('invoices.invoiceCount')}</th>
                 <th className="text-right">{t('common.actions')}</th>
               </tr>
@@ -260,32 +314,50 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
             <tbody>
               {pagedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
-                    {t('invoices.emptyWorkers')}
+                  <td colSpan={10} className="empty-cell">
+                    {t('invoices.emptyHosts')}
                   </td>
                 </tr>
               ) : (
-                pagedItems.map((s) => (
-                  <tr key={s.workerId}>
+                pagedItems.map((s) => {
+                  const tone = balanceTone(s.remainAmount, s.totalAmount);
+                  return (
+                  <tr key={summaryKey(s)} className={balanceRowClass(tone)}>
                     <td>
-                      <div className="cell-stack">
-                        <span className="cell-primary">{s.workerName}</span>
-                        <span className="cell-id">{s.serialNo || s.passportNo}</span>
-                      </div>
+                      <span className="cell-primary">{s.hostCompany}</span>
                     </td>
                     <td>
-                      <span className="cell-secondary">{s.hostCompany}</span>
+                      <span className="cell-secondary">{s.supervisingOrg || '—'}</span>
+                    </td>
+                    <td className="text-center">
+                      <span className="cell-mono">
+                        {hostWorkerCounts.get(s.hostCompany) || s.workerCount}
+                      </span>
                     </td>
                     <td className="text-right">
                       <span className="cell-mono">{money(s.totalAmount)}</span>
                     </td>
                     <td className="text-right">
-                      <span className="cell-mono text-emerald-600">{money(s.totalPaid)}</span>
+                      <span className={`cell-mono font-semibold ${balancePaidAmountClass(tone)}`}>
+                        {money(s.totalPaid)}
+                      </span>
                     </td>
                     <td className="text-right">
-                      <span className="cell-mono font-semibold text-amber-700">
+                      <span className={`cell-mono font-semibold ${balanceRemainClass(tone)}`}>
                         {money(s.remainAmount)}
                       </span>
+                    </td>
+                    <td className="text-center">
+                      <span className={`status-badge inline-block font-bold ${balanceBadgeClass(tone)}`}>
+                        {t(balanceStatusKey(tone, s.totalPaid))}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      {tone === 'paid' && s.lastPaymentDate ? (
+                        <span className="cell-mono font-semibold text-blue-700">{s.lastPaymentDate}</span>
+                      ) : (
+                        <span className="cell-secondary">—</span>
+                      )}
                     </td>
                     <td className="text-center">
                       <span className="cell-mono">{s.invoiceCount}</span>
@@ -301,7 +373,8 @@ export const InvoiceManagement: React.FC<InvoiceManagementProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -32,22 +32,17 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
   const [notes, setNotes] = useState(student?.notes || '');
 
   const [visaType, setVisaType] = useState(student?.deployment?.visaType || '');
-  const [supervisingOrg, setSupervisingOrg] = useState(student?.deployment?.supervisingOrg || '');
-  const [hostCompany, setHostCompany] = useState(student?.deployment?.hostCompany || '');
-  const [jobCategory, setJobCategory] = useState(student?.deployment?.jobCategory || '');
-  const [ownCardDate, setOwnCardDate] = useState(student?.deployment?.ownCardDate || '');
+  const [schoolName, setSchoolName] = useState(student?.deployment?.supervisingOrg || '');
+  const [schoolAddress, setSchoolAddress] = useState(student?.deployment?.hostCompany || '');
   const [departureDate, setDepartureDate] = useState(student?.deployment?.departureDate || '');
   const [japanEntryDate, setJapanEntryDate] = useState(student?.deployment?.japanEntryDate || '');
-  const [contractEndDate, setContractEndDate] = useState(student?.deployment?.contractEndDate || '');
 
   const [introductionFee, setIntroductionFee] = useState<number>(
     student?.financialConfig?.introductionFee || 100000
   );
 
   const [visaOptions, setVisaOptions] = useState<string[]>([]);
-  const [orgOptions, setOrgOptions] = useState<string[]>([]);
-  const [hostOptions, setHostOptions] = useState<string[]>([]);
-  const [jobOptions, setJobOptions] = useState<string[]>([]);
+  const [schoolOptions, setSchoolOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -56,9 +51,7 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
       .then((rows: SystemVariable[]) => {
         if (!Array.isArray(rows)) return;
         setVisaOptions(rows.filter((v) => v.category === 'visa_type').map((v) => v.value));
-        setOrgOptions(rows.filter((v) => v.category === 'supervising_org').map((v) => v.value));
-        setHostOptions(rows.filter((v) => v.category === 'host_company').map((v) => v.value));
-        setJobOptions(rows.filter((v) => v.category === 'job_category').map((v) => v.value));
+        setSchoolOptions(rows.filter((v) => v.category === 'school_name').map((v) => v.value));
       })
       .catch(() => undefined);
   }, []);
@@ -74,8 +67,8 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
       await showWarning(t('students.incompleteTitle'), t('students.nameRequired'));
       return;
     }
-    if (!visaType || !supervisingOrg || !hostCompany || !jobCategory) {
-      await showWarning(t('students.incompleteTitle'), t('students.dropdownRequired'));
+    if (!visaType || !schoolName || !schoolAddress.trim()) {
+      await showWarning(t('students.incompleteTitle'), t('students.fieldsRequired'));
       return;
     }
 
@@ -92,13 +85,13 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
         notes,
         deployment: {
           visaType,
-          supervisingOrg,
-          hostCompany,
-          jobCategory,
-          ownCardDate,
+          supervisingOrg: schoolName,
+          hostCompany: schoolAddress.trim(),
+          jobCategory: '',
+          ownCardDate: '',
           departureDate,
           japanEntryDate,
-          contractEndDate,
+          contractEndDate: '',
         },
         financialConfig: {
           introductionFee,
@@ -234,43 +227,53 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
             <PlaneTakeoff className="h-4 w-4" />
             {t('students.sectionDeployment')}
           </h4>
-          <p className="text-[11px] text-slate-500">{t('workerModal.dropdownHint')}</p>
+          <p className="text-[11px] text-slate-500">{t('students.visaHint')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {(
-              [
-                ['visa', visaType, setVisaType, visaOptions],
-                ['org', supervisingOrg, setSupervisingOrg, orgOptions],
-                ['host', hostCompany, setHostCompany, hostOptions],
-                ['job', jobCategory, setJobCategory, jobOptions],
-              ] as const
-            ).map(([key, value, setter, options]) => (
-              <div key={key}>
-                <label className="mb-1 block text-xs font-semibold text-slate-600">
-                  {t(`workerModal.${key}`)}
-                </label>
-                <select
-                  required
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">—</option>
-                  {withCurrent(options, value).map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">
-                {t('workerModal.ownCard')}
+                {t('workerModal.visa')}
+              </label>
+              <select
+                required
+                value={visaType}
+                onChange={(e) => setVisaType(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">—</option>
+                {withCurrent(visaOptions, visaType).map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                {t('students.schoolName')} *
+              </label>
+              <select
+                required
+                value={schoolName}
+                onChange={(e) => setSchoolName(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">—</option>
+                {withCurrent(schoolOptions, schoolName).map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-3">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                {t('students.schoolAddress')} *
               </label>
               <input
-                type="date"
-                value={ownCardDate}
-                onChange={(e) => setOwnCardDate(e.target.value)}
+                type="text"
+                required
+                value={schoolAddress}
+                onChange={(e) => setSchoolAddress(e.target.value)}
                 className={inputClass}
               />
             </div>
@@ -293,17 +296,6 @@ export const StudentFormPage: React.FC<StudentFormPageProps> = ({ student, onBac
                 type="date"
                 value={japanEntryDate}
                 onChange={(e) => setJapanEntryDate(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">
-                {t('workerModal.contractEnd')}
-              </label>
-              <input
-                type="date"
-                value={contractEndDate}
-                onChange={(e) => setContractEndDate(e.target.value)}
                 className={inputClass}
               />
             </div>

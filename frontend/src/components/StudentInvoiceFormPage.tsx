@@ -1,14 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StudentInvoice, Student } from '../types';
-import { ArrowLeft, Receipt, Save } from 'lucide-react';
+import { ArrowLeft, Receipt, Save, GraduationCap } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import { currencySymbol, type MoneyCurrency } from '../utils/currency';
 
+interface SystemVariable {
+  id: string;
+  category: string;
+  value: string;
+}
+
 interface StudentInvoiceFormPageProps {
   invoice: StudentInvoice | null;
   students: Student[];
-  preferredStudentId?: string;
+  preferredSchoolName?: string;
   onBack: () => void;
   onSave: (data: Partial<StudentInvoice>) => void | Promise<void>;
 }
@@ -20,7 +26,7 @@ function defaultInvoiceNo() {
 export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
   invoice,
   students,
-  preferredStudentId,
+  preferredSchoolName,
   onBack,
   onSave,
 }) => {
@@ -28,8 +34,9 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
   const { t } = useLanguage();
   const { formatMoney, displayCurrency } = useCurrency();
 
-  const [selectedStudentId, setSelectedStudentId] = useState(
-    invoice?.studentId || preferredStudentId || students[0]?.id || ''
+  const [schoolOptions, setSchoolOptions] = useState<string[]>([]);
+  const [selectedSchool, setSelectedSchool] = useState(
+    invoice?.schoolName || invoice?.supervisingOrg || preferredSchoolName || ''
   );
   const [invoiceNo, setInvoiceNo] = useState(invoice?.invoiceNo || defaultInvoiceNo());
   const [billingPeriod, setBillingPeriod] = useState(
@@ -46,32 +53,72 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
   const [currency, setCurrency] = useState<MoneyCurrency>(invoice?.currency || 'JPY');
   const [saving, setSaving] = useState(false);
 
-  const selectedStudent = useMemo(
+  useEffect(() => {
+    fetch('/api/settings/variables?activeOnly=1')
+      .then((r) => r.json())
+      .then((rows: SystemVariable[]) => {
+        if (!Array.isArray(rows)) return;
+        const fromSettings = rows
+          .filter((v) => v.category === 'school_name')
+          .map((v) => v.value);
+        const fromStudents = Array.from(
+          new Set(
+            students
+              .map((s) => s.deployment.supervisingOrg)
+              .filter((name): name is string => Boolean(name?.trim()))
+          )
+        );
+        const merged = Array.from(new Set([...fromSettings, ...fromStudents])).sort((a, b) =>
+          a.localeCompare(b)
+        );
+        setSchoolOptions(merged);
+        if (!selectedSchool && merged.length > 0 && !isEdit) {
+          setSelectedSchool(preferredSchoolName || merged[0]);
+        }
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students]);
+
+  const schoolStudents = useMemo(() => {
+    if (!selectedSchool) return [];
+    return students
+      .filter((s) => s.deployment.supervisingOrg === selectedSchool)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [students, selectedSchool]);
+
+  const computedTotal = useMemo(
     () =>
-      students.find((student) => student.id === selectedStudentId) ||
-      students.find((student) => student.id === invoice?.studentId),
-    [students, selectedStudentId, invoice?.studentId]
+      schoolStudents.reduce(
+        (sum, s) => sum + Number(s.financialConfig?.introductionFee || 0),
+        0
+      ),
+    [schoolStudents]
   );
 
   const [totalAmount, setTotalAmount] = useState<number>(
-    invoice?.totalAmount ?? Number(selectedStudent?.financialConfig?.introductionFee || 0)
+    invoice?.totalAmount ?? computedTotal
   );
+
+  useEffect(() => {
+    if (!isEdit) {
+      setTotalAmount(computedTotal);
+      if (selectedSchool) {
+        setBillingPeriod(`Introduction Fee — ${selectedSchool}`);
+      }
+    }
+  }, [computedTotal, selectedSchool, isEdit]);
 
   const entrySymbol = currencySymbol(currency);
 
-  const handleStudentChange = (studentId: string) => {
-    setSelectedStudentId(studentId);
-    const student = students.find((item) => item.id === studentId);
-    if (student && !isEdit) {
-      setTotalAmount(Number(student.financialConfig?.introductionFee || 0));
-      setBillingPeriod('Introduction Fee (One-time)');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isEdit && !selectedSchool) return;
+
     const payload: Partial<StudentInvoice> = {
-      studentId: selectedStudentId,
+      schoolName: selectedSchool,
+      supervisingOrg: selectedSchool,
       feeType: 'introduction',
       invoiceNo,
       billingPeriod,
@@ -113,7 +160,7 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
                 {isEdit ? t('invoices.editTitle') : t('invoices.createTitle')}
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                {t('students.introductionFee')} — {t('invoices.createHint')}
+                {t('students.schoolInvoiceHint')}
               </p>
             </div>
           </div>
@@ -124,29 +171,31 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
         {!isEdit ? (
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">
-              {t('students.title')} *
+              {t('students.schoolName')} *
             </label>
             <select
-              value={selectedStudentId}
-              onChange={(e) => handleStudentChange(e.target.value)}
+              required
+              value={selectedSchool}
+              onChange={(e) => setSelectedSchool(e.target.value)}
               className={`${inputClass} cursor-pointer`}
             >
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name} ({student.serialNo}) - {student.deployment.hostCompany}
+              <option value="">—</option>
+              {schoolOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </select>
           </div>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-            <span className="text-slate-500">{t('students.title')}:</span>{' '}
-            <strong className="text-slate-900">
-              {invoice?.studentName} ({invoice?.passportNo})
-            </strong>
+            <span className="text-slate-500">{t('students.schoolName')}:</span>{' '}
+            <strong className="text-slate-900">{invoice?.schoolName || invoice?.supervisingOrg}</strong>
             <div className="mt-0.5 text-slate-500">
-              Host:{' '}
-              <span className="font-medium text-slate-700">{invoice?.hostCompany}</span>
+              {t('students.studentCount')}:{' '}
+              <span className="font-medium text-slate-700">
+                {invoice?.studentCount ?? invoice?.lines?.length ?? 0}
+              </span>
             </div>
           </div>
         )}
@@ -154,12 +203,85 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
           <span className="text-slate-500">{t('invoices.feeType')}:</span>{' '}
           <strong className="text-slate-900">{t('students.introductionFee')}</strong>
-          {selectedStudent && (
-            <p className="mt-1 text-[11px] text-slate-500">
-              Config: {formatMoney(selectedStudent.financialConfig.introductionFee || 0, 'JPY')}
-            </p>
-          )}
         </div>
+
+        {!isEdit && selectedSchool && (
+          <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-blue-700 uppercase">
+              <GraduationCap className="h-4 w-4" />
+              {t('students.schoolStudents')} ({schoolStudents.length})
+            </h4>
+            {schoolStudents.length === 0 ? (
+              <p className="text-[11px] text-amber-700">{t('students.schoolStudentsEmpty')}</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-slate-500">
+                      <th className="px-3 py-2 font-semibold">{t('workers.colName')}</th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        {t('students.introductionFee')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schoolStudents.map((student) => (
+                      <tr key={student.id} className="border-b border-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-semibold text-slate-800">{student.name}</div>
+                          <div className="font-mono text-[10px] text-slate-400">
+                            {student.serialNo} · {student.passportNo}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-slate-700">
+                          {formatMoney(student.financialConfig?.introductionFee || 0, 'JPY')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[11px] font-semibold text-slate-600">
+              {t('invoices.total')}: {formatMoney(computedTotal, 'JPY')}
+            </p>
+          </div>
+        )}
+
+        {isEdit && (invoice?.lines?.length || 0) > 0 && (
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="text-xs font-bold tracking-wider text-slate-600 uppercase">
+              {t('students.schoolStudents')} ({invoice?.lines?.length})
+            </h4>
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50 text-left text-slate-500">
+                    <th className="px-3 py-2 font-semibold">{t('workers.colName')}</th>
+                    <th className="px-3 py-2 text-right font-semibold">
+                      {t('students.introductionFee')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice?.lines?.map((line) => (
+                    <tr key={line.id || line.studentId} className="border-b border-slate-50">
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-slate-800">{line.studentName}</div>
+                        <div className="font-mono text-[10px] text-slate-400">
+                          {line.serialNo} · {line.passportNo}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-700">
+                        {formatMoney(line.amount, invoice.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -217,7 +339,7 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
           <h4 className="text-xs font-bold tracking-wider text-emerald-700 uppercase">
             {t('invoices.amountSection')}
           </h4>
-          <p className="text-[11px] text-slate-500">{t('invoices.amountHint')}</p>
+          <p className="text-[11px] text-slate-500">{t('students.schoolInvoiceAmountHint')}</p>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">
               {t('invoices.currency')}
@@ -285,7 +407,7 @@ export const StudentInvoiceFormPage: React.FC<StudentInvoiceFormPageProps> = ({
           </button>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || (!isEdit && schoolStudents.length === 0)}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />

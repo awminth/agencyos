@@ -157,10 +157,11 @@ export async function recomputeInvoiceTotals(invoiceId: string): Promise<void> {
 export async function listPaymentsByInvoice(invoiceId: string): Promise<InvoicePayment[]> {
   await ensureInvoicePaymentsTable();
   const [rows] = await pool.query<PaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type, w.name AS worker_name
+    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type,
+            COALESCE(w.name, i.host_company) AS worker_name
      FROM invoice_payments p
      JOIN invoices i ON i.id = p.invoice_id
-     JOIN workers w ON w.id = i.worker_id
+     LEFT JOIN workers w ON w.id = i.worker_id
      WHERE p.invoice_id = :invoiceId
      ORDER BY p.payment_date DESC, p.created_at DESC`,
     { invoiceId }
@@ -174,13 +175,39 @@ export async function listPaymentsByWorkerFee(
 ): Promise<InvoicePayment[]> {
   await ensureInvoicePaymentsTable();
   const [rows] = await pool.query<PaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type, w.name AS worker_name
+    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type,
+            COALESCE(w.name, i.host_company) AS worker_name
      FROM invoice_payments p
      JOIN invoices i ON i.id = p.invoice_id
-     JOIN workers w ON w.id = i.worker_id
-     WHERE i.worker_id = :workerId AND i.fee_type = :feeType
+     LEFT JOIN workers w ON w.id = i.worker_id
+     WHERE i.fee_type = :feeType
+       AND (
+         i.worker_id = :workerId
+         OR EXISTS (
+           SELECT 1 FROM invoice_lines l
+           WHERE l.invoice_id = i.id AND l.worker_id = :workerId
+         )
+       )
      ORDER BY p.payment_date DESC, p.created_at DESC`,
     { workerId, feeType }
+  );
+  return rows.map(mapPayment);
+}
+
+export async function listPaymentsByHostFee(
+  hostCompany: string,
+  feeType: InvoiceFeeType
+): Promise<InvoicePayment[]> {
+  await ensureInvoicePaymentsTable();
+  const [rows] = await pool.query<PaymentRow[]>(
+    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type,
+            COALESCE(i.host_company, w.name) AS worker_name
+     FROM invoice_payments p
+     JOIN invoices i ON i.id = p.invoice_id
+     LEFT JOIN workers w ON w.id = i.worker_id
+     WHERE i.host_company = :hostCompany AND i.fee_type = :feeType
+     ORDER BY p.payment_date DESC, p.created_at DESC`,
+    { hostCompany, feeType }
   );
   return rows.map(mapPayment);
 }
@@ -188,10 +215,11 @@ export async function listPaymentsByWorkerFee(
 export async function getPaymentById(id: string): Promise<InvoicePayment> {
   await ensureInvoicePaymentsTable();
   const [rows] = await pool.query<PaymentRow[]>(
-    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type, w.name AS worker_name
+    `SELECT p.*, i.invoice_no, i.worker_id, i.fee_type,
+            COALESCE(w.name, i.host_company) AS worker_name
      FROM invoice_payments p
      JOIN invoices i ON i.id = p.invoice_id
-     JOIN workers w ON w.id = i.worker_id
+     LEFT JOIN workers w ON w.id = i.worker_id
      WHERE p.id = :id
      LIMIT 1`,
     { id }

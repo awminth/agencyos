@@ -6,6 +6,7 @@ export async function list(req: Request, res: Response): Promise<void> {
   const invoices = await studentInvoiceService.listStudentInvoices({
     status: typeof req.query.status === 'string' ? req.query.status : undefined,
     studentId: typeof req.query.studentId === 'string' ? req.query.studentId : undefined,
+    schoolName: typeof req.query.schoolName === 'string' ? req.query.schoolName : undefined,
     feeType: typeof req.query.feeType === 'string' ? req.query.feeType : undefined,
     upcoming7Days:
       typeof req.query.upcoming7Days === 'string' ? req.query.upcoming7Days : undefined,
@@ -34,9 +35,15 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
 export async function listPayments(req: Request, res: Response): Promise<void> {
   const studentId = typeof req.query.studentId === 'string' ? req.query.studentId : undefined;
+  const schoolName = typeof req.query.schoolName === 'string' ? req.query.schoolName : undefined;
 
   if (req.params.id === 'by-student' && studentId) {
     res.json(await studentInvoicePaymentService.listStudentPaymentsByStudent(studentId));
+    return;
+  }
+
+  if (req.params.id === 'by-school' && schoolName) {
+    res.json(await studentInvoicePaymentService.listStudentPaymentsBySchool(schoolName));
     return;
   }
 

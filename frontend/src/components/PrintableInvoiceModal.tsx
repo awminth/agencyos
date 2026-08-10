@@ -37,11 +37,12 @@ export const PrintableInvoiceModal: React.FC<PrintableInvoiceModalProps> = ({
     fetch('/api/settings/print')
       .then((r) => r.json())
       .then((data) => {
+        const src = data?.voucher1 || data;
         setPrintSettings({
-          agencyName: data.agencyName || '',
-          address: data.address || '',
-          phone: data.phone || '',
-          logoData: data.logoData || null,
+          agencyName: src.agencyName || '',
+          address: src.address || '',
+          phone: src.phone || '',
+          logoData: src.logoData || null,
         });
       })
       .catch(() => undefined);
@@ -55,22 +56,52 @@ export const PrintableInvoiceModal: React.FC<PrintableInvoiceModalProps> = ({
     .filter(Boolean)
     .join(' | ');
 
-  const subjectLabel = invoice.feeType === 'introduction' ? 'Student' : 'Worker';
+  const isStudent = invoice.feeType === 'introduction';
+  const isHostInvoice = !isStudent && Boolean(invoice.hostCompany);
+  const subjectLabel = isStudent ? 'Student' : isHostInvoice ? 'Host Company' : 'Worker';
   const serviceLabel =
     invoice.feeType === 'flight'
       ? 'Flight Fee'
       : invoice.feeType === 'training'
         ? 'Training Fee'
-        : invoice.feeType === 'introduction'
+        : isStudent
           ? 'Introduction Fee'
           : 'Management & Support Fee';
 
   const fields = [
-    { label: 'Host / AO', value: invoice.hostCompany },
-    { label: 'Supervising Org', value: invoice.supervisingOrg || '—' },
+    {
+      label: isStudent ? t('students.schoolName') : 'Host / AO',
+      value: isStudent
+        ? invoice.supervisingOrg || invoice.workerName || invoice.hostCompany
+        : invoice.hostCompany,
+    },
+    ...(isStudent
+      ? [
+          {
+            label: t('students.studentCount'),
+            value: invoice.passportNo || '—',
+          },
+        ]
+      : [{ label: 'Supervising Org', value: invoice.supervisingOrg || '—' }]),
     { label: 'Billing Cycle', value: invoice.billingPeriod },
-    { label: subjectLabel, value: invoice.workerName },
-    { label: 'Passport', value: invoice.passportNo },
+    {
+      label: subjectLabel,
+      value: isStudent
+        ? invoice.supervisingOrg || invoice.workerName
+        : isHostInvoice
+          ? invoice.hostCompany
+          : invoice.workerName,
+    },
+    ...(isStudent || isHostInvoice
+      ? isHostInvoice
+        ? [
+            {
+              label: t('invoices.workerCount'),
+              value: String(invoice.workerCount ?? invoice.lines?.length ?? 0),
+            },
+          ]
+        : []
+      : [{ label: 'Passport', value: invoice.passportNo }]),
     { label: 'Next Due', value: invoice.nextInvoiceDate || '—' },
     { label: 'Service', value: serviceLabel },
     { label: t('invoices.totalAmount'), value: money(invoice.totalAmount) },

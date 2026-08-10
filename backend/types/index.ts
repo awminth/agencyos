@@ -16,10 +16,13 @@ export interface DeploymentInfo {
   visaType: string;
   supervisingOrg: string;
   hostCompany: string;
+  /** Workers only; unused for students */
   jobCategory: string;
+  /** Workers only; unused for students */
   ownCardDate: string;
   departureDate: string;
   japanEntryDate: string;
+  /** Workers only; unused for students */
   contractEndDate: string;
 }
 
@@ -103,10 +106,21 @@ export interface FeePaymentSummary {
   currency: string;
 }
 
+export interface InvoiceLine {
+  id: string;
+  invoiceId: string;
+  workerId: string;
+  workerName: string;
+  serialNo?: string;
+  passportNo?: string;
+  amount: number;
+}
+
 export interface Invoice {
   id: string;
   invoiceNo: string;
-  workerId: string;
+  /** Legacy per-worker link (optional) */
+  workerId?: string;
   workerName: string;
   passportNo: string;
   hostCompany: string;
@@ -125,6 +139,8 @@ export interface Invoice {
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
   createdAt: string;
+  lines?: InvoiceLine[];
+  workerCount?: number;
 }
 
 export interface InvoicePayment {
@@ -144,10 +160,23 @@ export interface InvoicePayment {
 
 export type StudentInvoiceFeeType = 'introduction';
 
+export interface StudentInvoiceLine {
+  id: string;
+  invoiceId: string;
+  studentId: string;
+  studentName: string;
+  serialNo?: string;
+  passportNo?: string;
+  amount: number;
+}
+
 export interface StudentInvoice {
   id: string;
   invoiceNo: string;
-  studentId: string;
+  /** School Name — primary billable entity for introduction fees */
+  schoolName: string;
+  /** Legacy per-student invoice link (optional) */
+  studentId?: string;
   studentName: string;
   passportNo: string;
   hostCompany: string;
@@ -166,6 +195,8 @@ export interface StudentInvoice {
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
   createdAt: string;
+  lines?: StudentInvoiceLine[];
+  studentCount?: number;
 }
 
 export interface StudentInvoicePayment {
@@ -200,17 +231,20 @@ export interface StudentFeePaymentSummary {
 }
 
 export interface InvoiceWorkerSummary {
-  workerId: string;
-  workerName: string;
-  passportNo: string;
   hostCompany: string;
-  serialNo?: string;
+  supervisingOrg: string;
+  workerCount: number;
   feeType: InvoiceFeeType;
   totalAmount: number;
   totalPaid: number;
   remainAmount: number;
   invoiceCount: number;
   paymentCount: number;
+  /** @deprecated legacy */
+  workerId?: string;
+  workerName?: string;
+  passportNo?: string;
+  serialNo?: string;
 }
 
 export interface DashboardStats {

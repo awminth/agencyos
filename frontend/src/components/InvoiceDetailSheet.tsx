@@ -38,12 +38,37 @@ export const InvoiceDetailSheet: React.FC<InvoiceDetailSheetProps> = ({
   const money = (amount: number, currency?: string) =>
     formatMoney(amount, (currency as MoneyCurrency) || 'JPY');
 
+  const isStudent = invoice.feeType === 'introduction';
+  const isHostInvoice = !isStudent && Boolean(invoice.hostCompany);
   const rows: { label: string; value: string }[] = [
     { label: t('invoices.colInvoice'), value: invoice.invoiceNo },
     { label: 'Fee Type', value: feeTypeLabel(invoice.feeType, t) },
-    { label: t('invoices.colWorker'), value: `${invoice.workerName} · ${invoice.passportNo}` },
-    { label: t('invoices.colHost'), value: invoice.hostCompany || '—' },
-    { label: t('reports.colSupervisingOrg'), value: invoice.supervisingOrg || '—' },
+    {
+      label: isStudent
+        ? t('students.schoolName')
+        : isHostInvoice
+          ? t('invoices.colHost')
+          : t('invoices.colWorker'),
+      value: isStudent
+        ? invoice.supervisingOrg || invoice.workerName || '—'
+        : isHostInvoice
+          ? invoice.hostCompany
+          : `${invoice.workerName} · ${invoice.passportNo}`,
+    },
+    ...(isStudent
+      ? []
+      : isHostInvoice
+        ? [
+            { label: t('reports.colSupervisingOrg'), value: invoice.supervisingOrg || '—' },
+            {
+              label: t('invoices.workerCount'),
+              value: String(invoice.workerCount ?? invoice.lines?.length ?? 0),
+            },
+          ]
+        : [
+            { label: t('invoices.colHost'), value: invoice.hostCompany || '—' },
+            { label: t('reports.colSupervisingOrg'), value: invoice.supervisingOrg || '—' },
+          ]),
     { label: t('invoices.billingPeriod'), value: invoice.billingPeriod },
     {
       label: t('invoices.colDates'),

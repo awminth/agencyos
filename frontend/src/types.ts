@@ -28,13 +28,13 @@ export interface AuthUser {
 
 export interface DeploymentInfo {
   visaType: string; // from Settings system variables (dropdown)
-  supervisingOrg: string; // ကြီးကြပ်ရေးအဖွဲ့
-  hostCompany: string;    // လက်ခံ Company အမည်
-  jobCategory: string;    // အလုပ်အမျိုးအစား
-  ownCardDate: string;    // Own Card ရရှိသည့်နေ့
+  supervisingOrg: string; // School Name (students) / Supervising Org (workers)
+  hostCompany: string;    // School Address (students) / Host Company (workers)
+  jobCategory: string;    // workers only; unused for students
+  ownCardDate: string;    // workers only; unused for students
   departureDate: string;  // ထွက်ခွာသည့်နေ့
   japanEntryDate: string; // Japan ဝင်သည့်နေ့
-  contractEndDate: string;// စာချုပ်ပြီးဆုံးမည့်နေ့
+  contractEndDate: string;// workers only; unused for students
 }
 
 export interface FinancialConfig {
@@ -118,11 +118,21 @@ export interface FeePaymentSummary {
   currency: string;
 }
 
+export interface InvoiceLine {
+  id: string;
+  invoiceId: string;
+  workerId: string;
+  workerName: string;
+  serialNo?: string;
+  passportNo?: string;
+  amount: number;
+}
+
 export interface Invoice {
   id: string;
   invoiceNo: string;          // Invoice No (e.g. "INV-2026-001")
-  workerId: string;           // Ref to Worker
-  workerName: string;         // Denormalized for quick view
+  workerId?: string;          // Legacy optional
+  workerName: string;         // Often host company for host invoices
   passportNo: string;
   hostCompany: string;
   supervisingOrg: string;
@@ -140,6 +150,8 @@ export interface Invoice {
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
   createdAt: string;
+  lines?: InvoiceLine[];
+  workerCount?: number;
 }
 
 export interface InvoicePayment {
@@ -158,23 +170,41 @@ export interface InvoicePayment {
 }
 
 export interface InvoiceWorkerSummary {
-  workerId: string;
-  workerName: string;
-  passportNo: string;
   hostCompany: string;
-  serialNo?: string;
+  supervisingOrg: string;
+  workerCount: number;
   feeType: InvoiceFeeType;
   totalAmount: number;
   totalPaid: number;
   remainAmount: number;
   invoiceCount: number;
   paymentCount: number;
+  /** Latest payment received date across invoices (when fully paid / any payment). */
+  lastPaymentDate?: string;
+  /** @deprecated legacy per-worker fields */
+  workerId?: string;
+  workerName?: string;
+  passportNo?: string;
+  serialNo?: string;
+}
+
+export interface StudentInvoiceLine {
+  id: string;
+  invoiceId: string;
+  studentId: string;
+  studentName: string;
+  serialNo?: string;
+  passportNo?: string;
+  amount: number;
 }
 
 export interface StudentInvoice {
   id: string;
   invoiceNo: string;
-  studentId: string;
+  /** School Name — primary billable entity */
+  schoolName: string;
+  /** Legacy optional link */
+  studentId?: string;
   studentName: string;
   passportNo: string;
   hostCompany: string;
@@ -193,6 +223,8 @@ export interface StudentInvoice {
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
   createdAt: string;
+  lines?: StudentInvoiceLine[];
+  studentCount?: number;
 }
 
 export interface StudentInvoicePayment {
@@ -226,21 +258,23 @@ export interface StudentFeePaymentSummary {
   currency: string;
 }
 
-export interface StudentInvoiceWorkerSummary {
-  studentId: string;
-  studentName: string;
-  passportNo: string;
-  hostCompany: string;
-  serialNo?: string;
+export interface StudentInvoiceSchoolSummary {
+  schoolName: string;
+  studentCount: number;
   feeType: 'introduction';
   totalAmount: number;
   totalPaid: number;
   remainAmount: number;
   invoiceCount: number;
   paymentCount: number;
+  /** Latest payment received date across school invoices. */
+  lastPaymentDate?: string;
 }
 
-export type StudentInvoiceSummary = StudentInvoiceWorkerSummary;
+/** @deprecated Use StudentInvoiceSchoolSummary */
+export type StudentInvoiceWorkerSummary = StudentInvoiceSchoolSummary;
+
+export type StudentInvoiceSummary = StudentInvoiceSchoolSummary;
 
 export interface DashboardStats {
   totalWorkers: number;

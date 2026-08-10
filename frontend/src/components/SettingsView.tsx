@@ -27,7 +27,8 @@ type VariableCategory =
   | 'visa_type'
   | 'supervising_org'
   | 'host_company'
-  | 'job_category';
+  | 'job_category'
+  | 'school_name';
 
 interface PrintSettings {
   agencyName: string;
@@ -40,6 +41,7 @@ interface SystemVariable {
   id: string;
   category: VariableCategory;
   value: string;
+  parentValue?: string | null;
   sortOrder: number;
   isActive: boolean;
 }
@@ -49,6 +51,7 @@ const CATEGORIES: { id: VariableCategory; labelKey: string }[] = [
   { id: 'supervising_org', labelKey: 'settings.catOrg' },
   { id: 'host_company', labelKey: 'settings.catHost' },
   { id: 'job_category', labelKey: 'settings.catJob' },
+  { id: 'school_name', labelKey: 'settings.catSchool' },
 ];
 
 export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser }) => {
@@ -67,7 +70,14 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     canUsers && !can(currentUser.permissions, 'settings', 'read') ? 'users' : 'print'
   );
 
-  const [printForm, setPrintForm] = useState<PrintSettings>({
+  const [printSlot, setPrintSlot] = useState<1 | 2>(1);
+  const [printForm1, setPrintForm1] = useState<PrintSettings>({
+    agencyName: '',
+    address: '',
+    phone: '',
+    logoData: null,
+  });
+  const [printForm2, setPrintForm2] = useState<PrintSettings>({
     agencyName: '',
     address: '',
     phone: '',
@@ -75,6 +85,9 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
   });
   const [printSaving, setPrintSaving] = useState(false);
   const [printMsg, setPrintMsg] = useState('');
+
+  const printForm = printSlot === 1 ? printForm1 : printForm2;
+  const setPrintForm = printSlot === 1 ? setPrintForm1 : setPrintForm2;
 
   const [rateInput, setRateInput] = useState(String(jpyToMmkRate));
   const [displayInput, setDisplayInput] = useState<DisplayCurrency>(displayCurrency);
@@ -84,6 +97,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
   const [variables, setVariables] = useState<SystemVariable[]>([]);
   const [activeCategory, setActiveCategory] = useState<VariableCategory>('visa_type');
   const [newValue, setNewValue] = useState('');
+  const [newParentOrg, setNewParentOrg] = useState('');
   const [varMsg, setVarMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -94,12 +108,29 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
         fetch('/api/settings/print').then((r) => r.json()),
         fetch('/api/settings/variables').then((r) => r.json()),
       ]);
-      setPrintForm({
-        agencyName: pRes.agencyName || '',
-        address: pRes.address || '',
-        phone: pRes.phone || '',
-        logoData: pRes.logoData || null,
-      });
+      if (pRes?.voucher1 || pRes?.voucher2) {
+        setPrintForm1({
+          agencyName: pRes.voucher1?.agencyName || '',
+          address: pRes.voucher1?.address || '',
+          phone: pRes.voucher1?.phone || '',
+          logoData: pRes.voucher1?.logoData || null,
+        });
+        setPrintForm2({
+          agencyName: pRes.voucher2?.agencyName || '',
+          address: pRes.voucher2?.address || '',
+          phone: pRes.voucher2?.phone || '',
+          logoData: pRes.voucher2?.logoData || null,
+        });
+      } else {
+        const flat = {
+          agencyName: pRes.agencyName || '',
+          address: pRes.address || '',
+          phone: pRes.phone || '',
+          logoData: pRes.logoData || null,
+        };
+        setPrintForm1(flat);
+        setPrintForm2({ ...flat });
+      }
       setVariables(Array.isArray(vRes) ? vRes : []);
     } catch {
       setPrintMsg(t('settings.loadFail'));
@@ -138,16 +169,24 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
       const res = await fetch('/api/settings/print', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(printForm),
+        body: JSON.stringify({ ...printForm, slot: printSlot }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      setPrintForm({
-        agencyName: data.agencyName || '',
-        address: data.address || '',
-        phone: data.phone || '',
-        logoData: data.logoData || null,
-      });
+      if (data?.voucher1 || data?.voucher2) {
+        setPrintForm1({
+          agencyName: data.voucher1?.agencyName || '',
+          address: data.voucher1?.address || '',
+          phone: data.voucher1?.phone || '',
+          logoData: data.voucher1?.logoData || null,
+        });
+        setPrintForm2({
+          agencyName: data.voucher2?.agencyName || '',
+          address: data.voucher2?.address || '',
+          phone: data.voucher2?.phone || '',
+          logoData: data.voucher2?.logoData || null,
+        });
+      }
       setPrintMsg(t('settings.printSaved'));
     } catch {
       setPrintMsg(t('settings.printSaveFail'));
@@ -196,6 +235,10 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
   const addVariable = async () => {
     setVarMsg('');
     if (!newValue.trim()) return;
+    if (activeCategory === 'host_company' && !newParentOrg.trim()) {
+      setVarMsg(t('settings.hostNeedsOrg'));
+      return;
+    }
     try {
       const res = await fetch('/api/settings/variables', {
         method: 'POST',
@@ -203,6 +246,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
         body: JSON.stringify({
           category: activeCategory,
           value: newValue.trim(),
+          parentValue: activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
           sortOrder: filteredVars.length + 1,
         }),
       });
@@ -210,9 +254,10 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
       if (!res.ok) throw new Error(data.error || 'Create failed');
       setVariables((prev) => [...prev, data]);
       setNewValue('');
+      setNewParentOrg('');
       setVarMsg(t('settings.varAdded'));
-    } catch {
-      setVarMsg(t('settings.varAddFail'));
+    } catch (err: any) {
+      setVarMsg(err?.message || t('settings.varAddFail'));
     }
   };
 
@@ -351,7 +396,38 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
 
       {tab === 'print' && (
         <div className="bento-card space-y-5 p-5">
-          <p className="text-xs text-slate-500">{t('settings.printHint')}</p>
+          <p className="text-xs text-slate-500">{t('settings.printHintDual')}</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPrintSlot(1);
+                setPrintMsg('');
+              }}
+              className={`cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition ${
+                printSlot === 1
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {t('settings.voucherSlot1')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrintSlot(2);
+                setPrintMsg('');
+              }}
+              className={`cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition ${
+                printSlot === 2
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {t('settings.voucherSlot2')}
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[200px_1fr]">
             <div className="space-y-3">
@@ -444,7 +520,9 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
             className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
-            {printSaving ? t('common.loading') : t('settings.savePrint')}
+            {printSaving
+              ? t('common.loading')
+              : `${t('settings.savePrint')} (${printSlot === 1 ? t('settings.voucherSlot1') : t('settings.voucherSlot2')})`}
           </button>
         </div>
       )}
@@ -536,6 +614,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                 onClick={() => {
                   setActiveCategory(c.id);
                   setNewValue('');
+                  setNewParentOrg('');
                   setVarMsg('');
                   setVarPage(1);
                 }}
@@ -550,7 +629,23 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
             ))}
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {activeCategory === 'host_company' && (
+              <select
+                value={newParentOrg}
+                onChange={(e) => setNewParentOrg(e.target.value)}
+                className="min-w-[200px] flex-1 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+              >
+                <option value="">— {t('settings.selectOrg')} —</option>
+                {variables
+                  .filter((v) => v.category === 'supervising_org' && v.isActive)
+                  .map((v) => (
+                    <option key={v.id} value={v.value}>
+                      {v.value}
+                    </option>
+                  ))}
+              </select>
+            )}
             <input
               type="text"
               value={newValue}
@@ -589,6 +684,11 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                   >
                     <span className="min-w-0 flex-1 break-words font-medium text-slate-800">
                       {v.value}
+                      {v.parentValue ? (
+                        <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
+                          {t('settings.catOrg')}: {v.parentValue}
+                        </span>
+                      ) : null}
                     </span>
                     {canSettingsDelete && (
                       <div className="action-group">

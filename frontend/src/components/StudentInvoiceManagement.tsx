@@ -3,7 +3,7 @@ import {
   StudentInvoice,
   AuthUser,
   Student,
-  StudentInvoiceWorkerSummary,
+  StudentInvoiceSchoolSummary,
 } from '../types';
 import { Receipt, Plus, Search, ChevronRight, GraduationCap } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -15,14 +15,22 @@ import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { can } from '../utils/permissions';
 import { MobileFilterToggle } from './MobileFilterToggle';
 import { MobileMeta } from './MobileMeta';
-import { buildStudentSummaries } from './StudentFeeDetailPage';
+import { buildSchoolSummaries } from './StudentFeeDetailPage';
+import {
+  balanceTone,
+  balanceRowClass,
+  balanceBadgeClass,
+  balanceRemainClass,
+  balancePaidAmountClass,
+  balanceStatusKey,
+} from '../utils/invoiceBalanceUi';
 
 interface StudentInvoiceManagementProps {
   invoices: StudentInvoice[];
   students: Student[];
   currentUser: AuthUser;
-  onOpenCreateModal: (studentId?: string) => void;
-  onOpenStudentDetail: (summary: StudentInvoiceWorkerSummary) => void;
+  onOpenCreateModal: (schoolName?: string) => void;
+  onOpenSchoolDetail: (summary: StudentInvoiceSchoolSummary) => void;
 }
 
 export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> = ({
@@ -30,7 +38,7 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
   students,
   currentUser,
   onOpenCreateModal,
-  onOpenStudentDetail,
+  onOpenSchoolDetail,
 }) => {
   const { t } = useLanguage();
   const { formatMoney, label: currencyLabel } = useCurrency();
@@ -44,26 +52,22 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
   const [remainFilter, setRemainFilter] = useState<'ALL' | 'REMAIN' | 'PAID'>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const studentsById = useMemo(() => {
-    const map: Record<string, { serialNo?: string }> = {};
-    for (const student of students) map[student.id] = { serialNo: student.serialNo };
+  const summaries = useMemo(() => buildSchoolSummaries(invoices), [invoices]);
+
+  const schoolStudentCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const student of students) {
+      const school = student.deployment.supervisingOrg || '';
+      if (!school) continue;
+      map.set(school, (map.get(school) || 0) + 1);
+    }
     return map;
   }, [students]);
-
-  const summaries = useMemo(
-    () => buildStudentSummaries(invoices, studentsById),
-    [invoices, studentsById]
-  );
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return summaries.filter((summary) => {
-      const matchSearch =
-        !q ||
-        summary.studentName.toLowerCase().includes(q) ||
-        summary.passportNo.toLowerCase().includes(q) ||
-        summary.hostCompany.toLowerCase().includes(q) ||
-        (summary.serialNo || '').toLowerCase().includes(q);
+      const matchSearch = !q || summary.schoolName.toLowerCase().includes(q);
       const matchRemain =
         remainFilter === 'ALL' ||
         (remainFilter === 'REMAIN' && summary.remainAmount > 0) ||
@@ -88,20 +92,16 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
     (searchTerm.trim() ? 1 : 0) + (remainFilter !== 'ALL' ? 1 : 0);
 
   const exportHeaders = [
-    t('reports.colWorker'),
-    t('reports.colSerial'),
-    t('reports.colPassport'),
-    t('reports.colHostCompany'),
+    t('students.schoolName'),
+    t('students.studentCount'),
     `Total (${currencyLabel})`,
     `Paid (${currencyLabel})`,
     `Remain (${currencyLabel})`,
     'Invoices',
   ];
   const exportRows = filtered.map((summary) => [
-    summary.studentName,
-    summary.serialNo || '',
-    summary.passportNo,
-    summary.hostCompany,
+    summary.schoolName,
+    schoolStudentCounts.get(summary.schoolName) || summary.studentCount,
     money(summary.totalAmount),
     money(summary.totalPaid),
     money(summary.remainAmount),
@@ -152,7 +152,7 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
             <GraduationCap className="h-4 w-4" />
             {t('students.introductionFee')}
           </div>
-          <p className="mt-1">{t('students.feesSubtitle')}</p>
+          <p className="mt-1">{t('students.schoolInvoiceHint')}</p>
         </div>
 
         <MobileFilterToggle
@@ -168,7 +168,7 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
             <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder={t('students.search')}
+              placeholder={t('students.searchSchool')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-3 pl-9 text-xs text-slate-900 focus:border-blue-600 focus:outline-none sm:text-sm"
@@ -191,32 +191,60 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
           {pagedItems.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-slate-400">{t('students.feesEmpty')}</p>
           ) : (
-            pagedItems.map((summary) => (
+            pagedItems.map((summary) => {
+              const tone = balanceTone(summary.remainAmount, summary.totalAmount);
+              return (
               <button
-                key={summary.studentId}
+                key={summary.schoolName}
                 type="button"
-                onClick={() => onOpenStudentDetail(summary)}
-                className="mobile-list-row w-full cursor-pointer text-left"
+                onClick={() => onOpenSchoolDetail(summary)}
+                className={`mobile-list-row w-full cursor-pointer text-left ${balanceRowClass(tone)}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900">{summary.studentName}</p>
-                    <p className="mt-0.5 font-mono text-[11px] text-blue-600">
-                      {summary.serialNo || summary.passportNo}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900">{summary.schoolName}</p>
+                      <span className={`status-badge shrink-0 text-[10px] font-bold ${balanceBadgeClass(tone)}`}>
+                        {t(balanceStatusKey(tone, summary.totalPaid))}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {t('students.studentCount')}:{' '}
+                      {schoolStudentCounts.get(summary.schoolName) || summary.studentCount}
                     </p>
+                    {tone === 'paid' && summary.lastPaymentDate ? (
+                      <p className="mt-0.5 text-[11px] font-semibold text-blue-700">
+                        {t('invoices.payDate')}: {summary.lastPaymentDate}
+                      </p>
+                    ) : null}
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
                 </div>
                 <MobileMeta
                   items={[
                     { label: t('invoices.totalAmount'), value: money(summary.totalAmount) },
-                    { label: t('invoices.totalPaid'), value: money(summary.totalPaid) },
-                    { label: t('invoices.remainAmount'), value: money(summary.remainAmount) },
+                    {
+                      label: t('invoices.totalPaid'),
+                      value: (
+                        <span className={`font-semibold ${balancePaidAmountClass(tone)}`}>
+                          {money(summary.totalPaid)}
+                        </span>
+                      ),
+                    },
+                    {
+                      label: t('invoices.remainAmount'),
+                      value: (
+                        <span className={`font-semibold ${balanceRemainClass(tone)}`}>
+                          {money(summary.remainAmount)}
+                        </span>
+                      ),
+                    },
                     { label: t('invoices.invoiceCount'), value: String(summary.invoiceCount) },
                   ]}
                 />
               </button>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -224,11 +252,13 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t('reports.colWorker')}</th>
-                <th>{t('invoices.colHost')}</th>
+                <th>{t('students.schoolName')}</th>
+                <th className="text-center">{t('students.studentCount')}</th>
                 <th className="text-right">{t('invoices.totalAmount')}</th>
                 <th className="text-right">{t('invoices.totalPaid')}</th>
                 <th className="text-right">{t('invoices.remainAmount')}</th>
+                <th className="text-center">{t('common.status')}</th>
+                <th className="text-center">{t('invoices.payDate')}</th>
                 <th className="text-center">{t('invoices.invoiceCount')}</th>
                 <th className="text-right">{t('common.actions')}</th>
               </tr>
@@ -236,32 +266,49 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
             <tbody>
               {pagedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
+                  <td colSpan={9} className="empty-cell">
                     {t('students.feesEmpty')}
                   </td>
                 </tr>
               ) : (
-                pagedItems.map((summary) => (
-                  <tr key={summary.studentId}>
+                pagedItems.map((summary) => {
+                  const tone = balanceTone(summary.remainAmount, summary.totalAmount);
+                  return (
+                  <tr key={summary.schoolName} className={balanceRowClass(tone)}>
                     <td>
-                      <div className="cell-stack">
-                        <span className="cell-primary">{summary.studentName}</span>
-                        <span className="cell-id">{summary.serialNo || summary.passportNo}</span>
-                      </div>
+                      <span className="cell-primary">{summary.schoolName}</span>
                     </td>
-                    <td>
-                      <span className="cell-secondary">{summary.hostCompany || '—'}</span>
+                    <td className="text-center">
+                      <span className="cell-mono">
+                        {schoolStudentCounts.get(summary.schoolName) || summary.studentCount}
+                      </span>
                     </td>
                     <td className="text-right">
                       <span className="cell-mono">{money(summary.totalAmount)}</span>
                     </td>
                     <td className="text-right">
-                      <span className="cell-mono text-emerald-600">{money(summary.totalPaid)}</span>
+                      <span className={`cell-mono font-semibold ${balancePaidAmountClass(tone)}`}>
+                        {money(summary.totalPaid)}
+                      </span>
                     </td>
                     <td className="text-right">
-                      <span className="cell-mono font-semibold text-amber-700">
+                      <span className={`cell-mono font-semibold ${balanceRemainClass(tone)}`}>
                         {money(summary.remainAmount)}
                       </span>
+                    </td>
+                    <td className="text-center">
+                      <span className={`status-badge inline-block font-bold ${balanceBadgeClass(tone)}`}>
+                        {t(balanceStatusKey(tone, summary.totalPaid))}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      {tone === 'paid' && summary.lastPaymentDate ? (
+                        <span className="cell-mono font-semibold text-blue-700">
+                          {summary.lastPaymentDate}
+                        </span>
+                      ) : (
+                        <span className="cell-secondary">—</span>
+                      )}
                     </td>
                     <td className="text-center">
                       <span className="cell-mono">{summary.invoiceCount}</span>
@@ -269,7 +316,7 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
                     <td className="text-right">
                       <button
                         type="button"
-                        onClick={() => onOpenStudentDetail(summary)}
+                        onClick={() => onOpenSchoolDetail(summary)}
                         className="action-btn"
                         title={t('invoices.openDetail')}
                       >
@@ -277,7 +324,8 @@ export const StudentInvoiceManagement: React.FC<StudentInvoiceManagementProps> =
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
