@@ -203,6 +203,11 @@ const MM: Dict = {
 
   'workerModal.addTitle': 'အလုပ်သမားသစ် စာရင်းသွင်းရန်',
   'workerModal.editTitle': 'အလုပ်သမား အချက်အလက် ပြင်ဆင်ရန်',
+  'workerModal.createHint': 'အလုပ်သမားအသစ်၏ ကိုယ်ရေး၊ ဗီဇာနှင့် ကြေးနှုန်းများကို ဖြည့်သွင်းပါ။',
+  'workerModal.editHint': 'အလုပ်သမား အချက်အလက်များကို ပြင်ဆင်ပြီး သိမ်းဆည်းပါ။',
+  'workerModal.incompleteTitle': 'အချက်အလက် မပြည့်စုံပါ',
+  'workerModal.financialHint':
+    'ဤနေရာတွင် Fee Amount သတ်မှတ်ရုံသာ။ ပေးချေမှုမှတ်တမ်းကို Invoice စာမျက်နှာတွင် လုပ်ဆောင်ပါ။',
   'workerModal.section1': '၁။ အလုပ်သမား ကိုယ်ရေးအချက်အလက်',
   'workerModal.section2': '၂။ ဗီဇာနှင့် စာချုပ် အချက်အလက်များ',
   'workerModal.section3': '၃။ ငွေကြေး / ကြေးနှုန်းများ',
@@ -731,6 +736,11 @@ const EN: Dict = {
 
   'workerModal.addTitle': 'Register New Worker',
   'workerModal.editTitle': 'Edit Worker Profile',
+  'workerModal.createHint': 'Enter the new worker profile, visa, and fee settings.',
+  'workerModal.editHint': 'Update the worker profile and save your changes.',
+  'workerModal.incompleteTitle': 'Incomplete information',
+  'workerModal.financialHint':
+    'This section only defines fee amounts. Manage payment history from the Invoices page.',
   'workerModal.section1': '1. Worker Profile',
   'workerModal.section2': '2. Deployment & Contract',
   'workerModal.section3': '3. Financial Configuration',

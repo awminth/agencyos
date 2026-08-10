@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Sun, Moon, Monitor, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
 import { useLanguage } from '../context/LanguageContext';
-import { useTheme } from '../context/ThemeContext';
 import { LanguageDropdown } from './LanguageDropdown';
 
 interface LoginPageProps {
@@ -12,22 +11,12 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const { t } = useLanguage();
-  const { preference, cycleTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  const themeIcon =
-    preference === 'dark' ? (
-      <Moon className="h-4 w-4" />
-    ) : preference === 'light' ? (
-      <Sun className="h-4 w-4" />
-    ) : (
-      <Monitor className="h-4 w-4" />
-    );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,14 +63,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const controls = (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={cycleTheme}
-        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-600 shadow-sm backdrop-blur transition hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300"
-        title={t('nav.theme')}
-      >
-        {themeIcon}
-      </button>
       <LanguageDropdown variant="light" />
     </div>
   );

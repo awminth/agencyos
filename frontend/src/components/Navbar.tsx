@@ -1,9 +1,8 @@
 import React from 'react';
 import { AuthUser } from '../types';
-import { Bell, LogOut, Banknote, Sun, Moon, Monitor } from 'lucide-react';
+import { Bell, LogOut, Banknote } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
-import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { LanguageDropdown } from './LanguageDropdown';
 
 interface NavbarProps {
@@ -21,25 +20,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { t } = useLanguage();
   const { displayCurrency, setDisplayCurrency } = useCurrency();
-  const { preference, cycleTheme } = useTheme();
 
   const toggleCurrency = () => {
     void setDisplayCurrency(displayCurrency === 'JPY' ? 'MMK' : 'JPY');
-  };
-
-  const themeIcon =
-    preference === 'dark' ? (
-      <Moon className="h-4 w-4" />
-    ) : preference === 'light' ? (
-      <Sun className="h-4 w-4" />
-    ) : (
-      <Monitor className="h-4 w-4" />
-    );
-
-  const themeLabel = (pref: ThemePreference) => {
-    if (pref === 'dark') return t('nav.themeDark');
-    if (pref === 'light') return t('nav.themeLight');
-    return t('nav.themeSystem');
   };
 
   return (
@@ -78,16 +61,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {alertCount > 99 ? '99+' : alertCount}
               </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={cycleTheme}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-600/80 bg-slate-800/80 px-2 py-1.5 text-slate-200 transition-colors hover:border-amber-500/50 hover:text-amber-300"
-            title={`${t('nav.theme')}: ${themeLabel(preference)}`}
-          >
-            {themeIcon}
-            <span className="hidden text-[10px] font-semibold sm:inline">{themeLabel(preference)}</span>
           </button>
 
           <button

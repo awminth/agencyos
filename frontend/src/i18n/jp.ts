@@ -188,6 +188,11 @@ export const JP: Record<string, string> = {
   'students.deleteInvoiceFail': '学生請求書を削除できませんでした',
   'workerModal.addTitle': '新規労働者登録',
   'workerModal.editTitle': '労働者プロフィール編集',
+  'workerModal.createHint': '新しい労働者のプロフィール、ビザ、料金設定を入力してください。',
+  'workerModal.editHint': '労働者の情報を更新して保存してください。',
+  'workerModal.incompleteTitle': '入力内容が不完全です',
+  'workerModal.financialHint':
+    'ここでは料金額のみを設定します。支払い履歴は請求書ページで管理してください。',
   'workerModal.section1': '1. 労働者プロフィール',
   'workerModal.section2': '2. 配置と契約',
   'workerModal.section3': '3. 料金設定',
