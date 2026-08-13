@@ -1,177 +1,358 @@
-# AgencyMS အသုံးပြုလမ်းညွှန် (မြန်မာ)
+# AgencyMS အသုံးပြုလမ်းညွှန် (မြန်မာ) — လက်ရှိစနစ်ပုံစံ အပြည့်အစုံ
 
-ဤစာရွက်သည် Overseas Employment Agency Worker & Invoice Management System (AgencyMS) အတွက် အကူအညီစာရွက်ဖြစ်သည်။ လက်ရှိစနစ်သည် **Host Company / School အလိုက် Formal Digital Invoice** (Copy image + PDF) ကို အခြေခံသည်။
+ဤစာရွက်သည် AgencyMS (Overseas Employment Agency Worker & Invoice Management System) ၏ **လက်ရှိ အလုပ်လုပ်ပုံ** အားလုံးကို ဖော်ပြသည်။ Help Chat သည် ဤစာရွက်ကိုသာ အခြေခံ၍ မြန်မာလို ဖြေရမည်။
 
-## စနစ်အကြောင်း အတိုချုပ်
+---
 
-AgencyMS သည် ဂျပန်အလုပ်အကိုင် ကိုယ်စားလှယ်အေဂျင်စီများအတွက် အလုပ်သမား (Workers)၊ ကျောင်းသား (Students)၊ ငွေတောင်းခံလွှာ (Invoices)၊ အစီရင်ခံစာများ (Reports) နှင့် ဆက်တင်များကို စီမံခန့်ခွဲသည့် ဝက်ဘ်အက်ပ်ဖြစ်သည်။
+## ၁။ စနစ်အကြောင်း အတိုချုပ်
 
-အဓိက မီနူးများ — Dashboard၊ Workers၊ Students၊ Deployments၊ Invoices၊ Reports၊ Settings။
+AgencyMS သည် ဂျပန်အလုပ်အကိုင် ကိုယ်စားလှယ်အေဂျင်စီများအတွက် —
 
-## Login / အကောင့်
+- အလုပ်သမား (Workers) နှင့် ကျောင်းသား (Students) စီမံခြင်း
+- Host Company / School အလိုက် **Formal Digital Invoice** ထုတ်ခြင်း
+- ပေးချေမှု၊ voucher၊ အစီရင်ခံစာ၊ ဆက်တင်များ
 
-- အကောင့်ဖြင့် ဝင်ရောက်ရသည်။
-- အသုံးပြုသူတိုင်းတွင် ခွင့်ပြုချက် (permissions) ရှိသည် — ဖတ်ရန်၊ ထည့်ရန်၊ ပြင်ရန်၊ ဖျက်ရန်။
-- ခွင့်မရှိသော မီနူးကို မမြင်ရ သို့မဟုတ် သုံးမရပါ။
-- Admin သို့မဟုတ် users ခွင့်ရှိသူက Settings → User Accounts မှ အကောင့်နှင့် ခွင့်ပြုချက် စီမံနိုင်သည်။
+ကို တစ်နေရာတည်းတွင် စီမံသည့် ဝက်ဘ်အက်ပ်ဖြစ်သည်။
 
-## Dashboard
+### မီနူးများ (Sidebar / မိုဘိုင်း Bottom Nav)
 
-- အလုပ်သမား အရေအတွက်၊ invoice အခြေအနေ၊ စာချုပ်ကုန်ဆုံးမည့်သူများ၊ ကျန်ငွေ (outstanding) အနှစ်ချုပ်ကို ပြသည်။
-- Outstanding / Collected တွင် **Worker invoices + Student invoices** နှစ်မျိုးလုံး ပေါင်းပြသည်။
-- အချက်အလက် ပြင်ဆင်လိုပါက သက်ဆိုင်ရာ မီနူး (Workers / Invoices စသည်) သို့ သွားပါ။
+| မီနူး (မြန်မာ) | အင်္ဂလိပ် | အဓိကလုပ်ဆောင်ချက် |
+|---------------|-----------|---------------------|
+| ပင်မ ဒက်ရှ်ဘုတ် | Dashboard | အနှစ်ချုပ် ကတ်များ၊ ဇယားများ |
+| အလုပ်သမား | Workers | Worker CRUD၊ Excel Import/Export |
+| ကျောင်းသား | Students | Profiles + Introduction Fees |
+| ဗီဇာ / စာချုပ် | Deployments | Worker deployment ရှုထောင့် |
+| ငွေစာရင်း | Invoices | Host အလိုက် fee invoices |
+| အစီရင်ခံစာ | Reports | Fees / Students / Upcoming / Outstanding / Expiry |
+| ဆက်တင် | Settings | Print၊ Bank၊ Currency၊ Variables၊ Users |
 
-## Workers (အလုပ်သမား)
+အပေါ်ဘား (Navbar) တွင် — ဘာသာစကား၊ ငွေကြေးပြသမှု၊ **အသိပေးချက်များ (ခေါင်းလောင်း)**၊ Log out။  
+Help Chat ခလုတ်သည် ညာအောက်တွင် ပေါ်သည် (login ပြီးမှ)။
 
-### ဘယ်မှာ ထည့်ရမလဲ
+ခွင့်ပြုချက် `read` မရှိသော မီနူးကို မမြင်ရ / သုံးမရ။
 
-1. Sidebar (သို့ မိုဘိုင်း Bottom Nav) မှ **Workers** ကို နှိပ်ပါ။
-2. **Add / အသစ်ထည့်** ခလုတ်ဖြင့် Worker Form ဖွင့်ပါ။
-3. လိုအပ်သော အချက်အလက် ဖြည့်ပြီး Save လုပ်ပါ။
+---
 
-### အဓိက အချက်အလက်များ
+## ၂။ Login / အခန်းကဏ္ဍ / ခွင့်ပြုချက်
 
-- Serial No၊ အမည်၊ ကျား/မ၊ မွေးနေ့ (DOB)၊ Passport No
-- Status — Active၊ Contract Ended၊ Absconded
-- Deployment — Visa Type၊ Supervising Org၊ Host Company၊ Job Category
-- ရက်စွဲများ — Own Card Date၊ Departure Date၊ Japan Entry Date၊ Contract End Date
-- ငွေကြေး config — Flight Fee၊ Training Fee၊ Management Fee၊ Billing Cycle Months၊ Currency (JPY / MMK / USD)
+### Login
 
-Visa Type၊ Supervising Org၊ Host Company၊ Job Category တို့သည် Settings → System Variables တွင် သတ်မှတ်ထားသော တန်ဖိုးများနှင့် ကိုက်ညီသင့်သည်။
+1. Email + Password ထည့်ပါ။
+2. **အကောင့်မှတ်ထားမည် (Remember me)** ရွေးနိုင်သည်။
+3. Login စာမျက်နှာတွင် ဘာသာစကား (မြန်မာ / English / 日本語) ပြောင်းနိုင်သည်။
+4. အောင်မြင်ရင် Dashboard သို့ ရောက်သည်။
 
-### Excel Import / Template
+### Roles (ပုံမှန်)
 
-1. Workers စာမျက်နှာတွင် **Template** ဒေါင်းလုပ်လုပ်ပါ။
-2. Excel တွင် ကော်လံခေါင်းစဉ်များကို မပြောင်းဘဲ ဖြည့်ပါ။
-3. ဖိုင်ကို **Import** ဖြင့် တင်ပါ။
+- **Admin** — module အားလုံး CRUD၊ Users စီမံနိုင်
+- **Manager** — Workers/Students/Deployments/Invoices create+read+update (delete မရ)၊ Reports read၊ Settings read+update၊ Users မရ
+- **Staff** — အဓိက module များ read-only၊ Settings / Users မရ
 
-### Export
+### Permission modules
 
-Workers စာရင်းကို Excel / PDF အဖြစ် Export လုပ်နိုင်သည်။
+`dashboard`၊ `workers`၊ `students`၊ `deployments`၊ `invoices`၊ `reports`၊ `settings`၊ `users` — တစ်ခုချင်း create / read / update / delete။
 
-## Students (ကျောင်းသား)
+အကောင့်စီမံရန် — Settings → **အသုံးပြုသူ အကောင့်များ** (`users` ခွင့်လို)။
 
-1. **Students** မီနူးသို့ သွားပါ။
-2. အသစ်ထည့် / ပြင် / ဖျက် / status ပြောင်း — Workers နှင့် ဆင်တူစီးဆင်းမှု။
-3. Introduction Fee invoices သည် **School အလိုက်** ဖန်တီးသည် (ကျောင်းတစ်ခုအောက်ရှိ ကျောင်းသားများ စုပေါင်း)။
+---
 
-## Deployments
+## ၃။ Dashboard (ပင်မ ဒက်ရှ်ဘုတ်)
 
-- Deployment အချက်အလက် (ဗီဇာ၊ ကုမ္ပဏီ၊ ရက်စွဲများ) ကို Workers / Students ဖောင်မှတဆင့် စီမံသည်။
-- Deployments မီနူးသည် deployment ရှုထောင့်မှ စာရင်းကြည့်ရန် ဖြစ်သည်။
+### သတိပေးဘန်နာ (ရှိမှ ပေါ်)
 
-## Invoices (Worker — Host Company Billing)
+- Management invoice — **နောက် ၇ ရက်** အတွင်း next invoice date၊ Paid မဟုတ်သေး
+- စာချုပ်ကုန်ဆုံး — Active worker၊ contract end **၆၀ ရက်** အတွင်း
 
-### အဓိက သဘောတရား
+### အနှစ်ချုပ် ကတ် ၄ ခု
 
-- Invoice တစ်စောင်သည် **Host Company တစ်ခု** အတွက် ဖြစ်သည် (Supervising Org + Host)။
-- ထို host အောက်ရှိ workers များကို **line items** အဖြစ် ထည့်သည်။
-- Fee tabs — **Management Fee**၊ **Flight Fee**၊ **Training Fee**။
+1. Total Workers (+ Active / Contract Ended အရေအတွက်)
+2. Absconding Rate % (+ Absconded အရေအတွက်)
+3. Outstanding (ကျန်ငွေ) + pending invoice အရေအတွက်
+4. Unsent Receipts (receipt မပို့ရသေးသော အရေအတွက်)
 
-### Invoice အသစ် ဖန်တီးရန်
+မှတ်ချက် — Outstanding / Collected / pending စသည်တို့သည် API တွင် **Worker + Student invoices ပေါင်း** တွက်သည်။ Dashboard UI တွင် Collected ကတ် သီးခြား မပြပါ။
 
-1. **Invoices** မီနူး → fee tab ရွေးပါ။
-2. **Create Invoice** နှိပ်ပါ။
-3. Supervising Org → Host Company ရွေးပါ (workers/lines အလိုအလျောက် ပေါ်မည်)။
-4. **Formal Invoice fields** ဖြည့်ရမည် (မဖြည့်ရင် Save မရ) —
-   - **Billed To (Attn)** — လက်ခံသူအမည် / ဌာန
-   - **Subject** — ငွေတောင်းခံ ခေါင်းစဉ်
-   - **Tax Rate** — 0% / 8% / 10% (ဂျပန် consumption tax)
-   - **Bank Account** — Settings တွင် မှတ်ထားသော အကောင့်မှ dropdown ရွေးပါ
-5. Save လုပ်ပါ။
+### အခြား
 
-### ငွေတွက်ချက်မှု (အရေးကြီး)
+- Status pie chart (Active / Ended / Absconded)
+- Visa bar chart
+- Recent invoices / Recent workers စာရင်း
+- Excel / PDF export (dashboard summary)
 
-- **Total Amount (subtotal)** = tax မပါသော စုစုပေါင်း (line amounts ပေါင်း)
-- **Tax Amount** = subtotal × tax rate
-- **Amount Due** = subtotal + tax — **ပေးချေမှုများသည် Amount Due ကို အခြေခံသည်**
-- **Outstanding** = Amount Due − Amount Received
-- Status — Pending / Partial / Paid (ကျန်ငွေ ၀ ဖြစ်ရင် Paid)
+---
 
-### Invoice ကြည့် / မျှဝေရန် (Formal Digital Invoice)
+## ၄။ Workers (အလုပ်သမား)
 
-1. Host card ကို နှိပ် → Fee Detail စာမျက်နှာ။
-2. Invoice အတန်းရှိ **View (မျက်လုံး)** သို့မဟုတ် **Invoice Preview** နှိပ်ပါ။
-3. Formal invoice ဖွင့်မည် — Excel ပုံစံနှင့် ဆင်တူသော်လည်း **A4 ပုံနှိပ်မဟုတ်**၊ digital share အတွက် ဖြစ်သည်။
-4. **Copy image** သို့မဟုတ် **PDF Download** သုံးပါ (chat / email မျှဝေရန်)။
-5. **Voucher 1 / Voucher 2** tabs — Settings → Print Setting တွင် သတ်မှတ်ထားသော letterhead နှစ်ခု ပြောင်းကြည့်နိုင်သည်။
+### စာရင်း
 
-### ပေးချေမှု (Record Payment)
+1. **အလုပ်သမား** မီနူး ဖွင့်ပါ။
+2. ရှာဖွေ / Status / Visa / Contract expiry စစ်ထုတ်နိုင်သည်။
+3. Excel / PDF Export လုပ်နိုင်သည်။
 
-1. Fee Detail တွင် **Pay** နှိပ်ပါ (Paid / outstanding = ၀ ဖြစ်ရင် Pay **မပေါ်**).
-2. ပမာဏသည် outstanding ထက် မပိုရ (ပိုရိုက်ရင် error)။
-3. Partial / Full ပေးချေပြီးနောက် outstanding နှင့် status အလိုအလျောက် ပြောင်းသည်။
-4. Payment voucher ကို View ဖြင့် ဖွင့်နိုင်သည် — formal invoice ပုံစံတူ layout + Copy / PDF။
+### အသစ်ထည့်ရန်
 
-### Invoice Edit သတိ
+1. **အလုပ်သမားသစ် သွင်းရန်** နှိပ်ပါ။
+2. ပိုင်း ၃ ပိုင်း ဖြည့်ပါ —
 
-- Attn / Subject / Bank Account မရှိသော invoice ဟောင်းများကို Edit လုပ်ရင် ဖြည့်မှ Save ရမည်။
-- Tax rate ပြောင်းရင် outstanding ပြန်တွက်သည်။
+**Profile**
+- Serial No၊ အမည်*၊ ကျား/မ၊ မွေးနေ့၊ Passport*၊ Status၊ Notes
+- Status — Active / Contract Ended / Absconded (Absconded ဖြစ်ရင် Absconded Date)
 
-## Student Invoices (School Billing)
+**Deployment (ဗီဇာ / နေရာချထားမှု)**
+- Visa Type*၊ Supervising Org*၊ Host Company*၊ Job Category*
+- Own Card Date၊ Departure Date၊ Japan Entry Date၊ Contract End Date
+- Dropdown တန်ဖိုးများသည် Settings → **စနစ် ကိန်းရှင်များ** မှ လာသည်
 
-- Students / Introduction Fee အပိုင်းမှ **School** အလိုက် invoice ဖန်တီးသည်။
-- Formal fields (Attn, Subject, Tax Rate, Bank Account) — Worker invoice နှင့် **တူညီ**။
-- View → Formal invoice / Copy / PDF / Voucher 1–2 tabs တူညီ။
-- Payment + overpayment ကာကွယ်မှု တူညီ။
+**Financial config**
+- Currency — JPY / MMK / USD
+- Flight Fee၊ Training Fee၊ Management Fee
+- Billing Cycle Months (ပုံမှန် ၆)
 
-## Reports
+3. Save လုပ်ပါ။
 
-Reports မီနူးအောက်တွင် —
+### ပြင် / အသေးစိတ် / ဖျက်
 
-- **Fees** — Worker fee payments (host line-item invoices ပါ အပါအဝင်၊ tax-inclusive due)
-- **Students** — ကျောင်းသား introduction fee status
-- **Upcoming** — လာမည့် management invoice ရက်များ
-- **Outstanding** — ကျန်ငွေရှိသော invoices (host invoices အပါအဝင်)
-- **Expiry** — စာချုပ်ကုန်ဆုံးမည့်သူများ
+- စာရင်းမှ Edit၊ Detail modal၊ Delete (ခွင့်ရှိမှ)
+- Active worker အတွက် **Mark Absconded** (ရက်စွဲ + မှတ်ချက်) အမြန်လုပ်နိုင်သည်
+- ဆက်စပ် invoice ရှိရင် ဖျက်ရာတွင် သတိပေးနိုင်သည်
 
-## Settings
+### Excel Import
 
-### Print Setting (Voucher 1 / Voucher 2)
+1. **Template** ဒေါင်းလုပ် — Settings Variables နမူနာ ပါသည်။
+2. ကော်လံခေါင်းစဉ် မပြောင်းဘဲ ဖြည့်ပါ။
+3. **Import** တင်ပါ — အမှားရှိရင် **တစ်ခုမှ မထည့်** (rollback)။
 
-- အေဂျင်စီ letterhead နှစ်ခု သတ်မှတ်နိုင်သည်။
-- Logo၊ Agency Name၊ Address၊ Phone၊ **Registration No.**၊ **FAX**။
-- Invoice / Payment voucher preview တွင် Voucher 1 သို့မဟုတ် 2 ရွေးပြနိုင်သည်။
+လိုအပ်အနည်းဆုံး — Name၊ Passport No၊ Visa Type၊ Supervising Org၊ Host Company၊ Job Category။
 
-### Bank Accounts (သီးခြား tab)
+---
 
-1. Settings → **Bank Accounts**။
-2. Bank Name၊ Account Number၊ Account Holder စသည် ထည့်ပါ (default အကောင့် သတ်မှတ်နိုင်)။
-3. Invoice ဖန်တီး/ပြင်သည့်အခါ dropdown မှ ရွေးသည် — ရွေးချိန်က snapshot အဖြစ် invoice ပေါ်တွင် မှတ်သည်။
+## ၅။ Students (ကျောင်းသား)
 
-### Currency Exchange
+Students မီနူးတွင် **tab နှစ်ခု** ရှိသည် —
 
-- ပြသမည့် ငွေကြေးနှင့် ငွေလဲနှုန်း။
+### ၅.၁ Profiles (ကျောင်းသားကိုယ်ရေး)
 
-### System Variables
+1. အသစ်ထည့် — Profile / Visa+School / Introduction Fee
+2. လိုအပ် — Visa Type၊ **School Name** (`school_name` variable)၊ School Address (စာသား — စနစ်တွင် hostCompany အဖြစ် သိမ်း)
+3. Introduction Fee ငွေကြေး — **JPY**
+4. Status / Mark Absconded — Workers နှင့် ဆင်တူ
+5. Excel / PDF **Export** ရသည် — **Excel Import မရှိ**
+6. ဆက်စပ် student invoice ရှိရင် ဖျက်ရာတွင် သတိပေး
 
-- visa_type၊ supervising_org၊ host_company၊ job_category၊ school စသည့် dropdown တန်ဖိုးများ။
+### ၅.၂ Introduction Fees (ကျောင်းအလိုက် ငွေတောင်းခံ)
 
-### User Accounts
+- **School Name** အလိုက် invoice တစ်စောင် — ထိုကျောင်းအောက်ရှိ ကျောင်းသားများကို line items အဖြစ် စုပေါင်း
+- Formal Invoice စီးဆင်းမှုသည် Worker Host Invoice နှင့် **တူညီ** (အောက်ပိုင်း ၇ ကြည့်ပါ)
+- Invoices မီနူးအောက်တွင် မဟုတ် — **Students → Introduction Fees** မှ စီမံသည်
 
-- အသုံးပြုသူအကောင့်နှင့် module permissions။
+---
 
-## အသုံးပြု အဆင့်လိုက် (အကြံပြု)
+## ၆။ Deployments (ဗီဇာ / စာချုပ်)
 
-1. Settings → Variables (Host / Org / School) ဖြည့်ပါ။
-2. Settings → Print Setting (Voucher 1/2) + Registration / FAX။
-3. Settings → Bank Accounts — အနည်းဆုံး ၁ ခု။
-4. Workers / Students ထည့်ပါ။
-5. Invoices → Create (Attn, Subject, Tax, Bank)။
-6. View → Copy / PDF မျှဝေပါ။
-7. Pay → Payment voucher View။
+- သီးခြား entity မဟုတ် — **Workers စာရင်းကို deployment ရှုထောင့်** ဖြင့် ပြသည်
+- ခေါင်းစဉ် — **ဗီဇာ / စာချုပ် စီမံခန့်ခွဲခြင်း**
+- ကော်လံ — Visa၊ Org/Host၊ Departure၊ Japan Entry၊ Contract End၊ ရက်ကျန် badge
+- ရှာဖွေ — အမည် / passport / host / visa
+- Sidebar badge — contract **၃၀ ရက်** အတွင်း ကုန်ဆုံးမည့် Active workers
+- Add / Edit / Delete — workers ကဲ့သို့ (deployments permission)
+- ဤ view တွင် Excel Import **မရှိ**
 
-## ဘာသာစကား UI
+---
 
-- အက်ပ် UI တွင် မြန်မာ / အင်္ဂလိပ် / ဂျပန် ပြောင်းနိုင်သည် (Language dropdown)။
-- Help Chat ကူညီသူက **မြန်မာဘာသာဖြင့်သာ** မေး/ဖြေသည်။
-- တစ်ရက်လျှင် အသုံးပြုသူတစ်ဦး အကြိမ် ၃၀ အထိ မေးနိုင်သည်။
+## ၇။ Invoices (ငွေစာရင်း — Host Company Billing)
 
-## မလုပ်သင့် / မဖြေသင့်သောအရာများ
+### အဓိက ပုံစံ (အရေးကြီး)
+
+- Invoice တစ်စောင် = **Host Company တစ်ခု** (+ Supervising Org)
+- ထို host အောက် workers = **line items**
+- Fee tabs သုံးခု —
+  1. **Management Fee**
+  2. **Flight Fee**
+  3. **Training Fee**
+- စာရင်းတွင် Host card/row များ ပြသည် (worker တစ်ဦးချင်း မဟုတ်)
+
+### ၇.၁ Invoice အသစ် ဖန်တီးရန်
+
+1. **ငွေစာရင်း** → Fee tab ရွေးပါ။
+2. **ငွေတောင်းခံလွှာ အသစ်ထုတ်ရန် (Create Invoice)** နှိပ်ပါ။
+3. Supervising Org → Host Company ရွေးပါ → workers/lines အလိုအလျောက် ပေါ်မည်။
+4. **Formal Invoice fields** မဖြည့်ရင် Save **မရ** —
+   - **Attn (Billed To)** * — လက်ခံသူ / ဌာန (ပုံမှန်: Management / Representatives)
+   - **Subject** * — ငွေတောင်းခံ ခေါင်းစဉ်
+   - **Tax Rate** * — 10% / 8% / 0%
+   - **Bank Account** * — Settings → Bank Accounts မှ ရွေး (default အကောင့် ရှိရင် အလိုအလျောက်)
+5. Live preview — Subtotal (Excl. Tax) / Consumption Tax / Total Amount Due
+6. Save လုပ်ပါ။
+
+### ၇.၂ ငွေတွက်ချက်မှု
+
+| အမည် | အဓိပ္ပာယ် |
+|------|-----------|
+| Total Amount / Subtotal | Tax **မပါ** — line amounts ပေါင်း |
+| Tax Amount | Subtotal × Tax Rate |
+| Amount Due | Subtotal + Tax — **ပေးချေမှု ဤပမာဏကို အခြေခံ** |
+| Outstanding | Amount Due − Amount Received |
+| Status | Pending / Partial / Paid (ကျန် ၀ = Paid) |
+
+### ၇.၃ Host Fee Detail စာမျက်နှာ
+
+Host card နှိပ် → ထို host + fee type အတွက် အသေးစိတ် —
+
+- အနှစ်ချုပ် — Total / Paid / Remain
+- **Total Paid Voucher** (စုပေါင်း voucher)
+- Invoice တစ်ခုချင်း —
+  - **Eye / Invoice Preview** → Formal invoice
+  - **Pay** — `invoices.update` ရှိရမည် + status ≠ Paid + outstanding > 0 (မကိုက်ရင် **မပေါ်**)
+  - Edit / Delete (ခွင့်ရှိမှ)
+- **Payment Vouchers** — View / Delete
+
+### ၇.၄ Formal Invoice Preview / မျှဝေရန်
+
+- Excel ပုံစံနှင့် ဆင်တူသော digital invoice — **A4 ပုံနှိပ် POS မဟုတ်**
+- **Copy image** + **PDF Download** (chat / email မျှဝေရန်)
+- **Voucher 1 / Voucher 2** tabs — Print Setting letterhead နှစ်ခု ပြောင်းကြည့်
+
+### ၇.၅ ပေးချေမှု (Pay)
+
+1. Pay နှိပ် → ပမာဏ၊ ရက်စွဲ၊ Receipt No၊ Notes
+2. ပမာဏသည် outstanding **ထက် မပိုရ** (ပိုရိုက်ရင် error / submit မရ)
+3. Partial / Full ပြီးရင် outstanding + status အလိုအလျောက် ပြောင်း
+4. ပြီးရင် Payment voucher ဖွင့်နိုင် — formal layout + Copy / PDF + Voucher 1/2
+
+### ၇.၆ Edit သတိ
+
+- Attn / Subject / Bank မရှိသော invoice ဟောင်း Edit လုပ်ရင် ဖြည့်မှ Save ရ
+- Tax rate ပြောင်းရင် outstanding ပြန်တွက်
+
+---
+
+## ၈။ Student Invoices (School Billing) — အသေးစိတ်
+
+လမ်းကြောင်း — **ကျောင်းသား → Introduction Fees**
+
+1. School ရွေး → ကျောင်းသား lines (introduction fee ပေါင်း — ပြင်နိုင်)
+2. Formal fields — Attn / Subject / Tax / Bank (**Worker နှင့် တူ**)
+3. School fee detail — Pay / Invoice Preview / Edit / Delete / Payment Vouchers / Total Paid Voucher
+4. Formal preview + Copy / PDF + Voucher 1/2 — တူညီ
+5. Overpayment ကာကွယ်မှု — တူညီ
+
+---
+
+## ၉။ Reports (အစီရင်ခံစာ)
+
+Reports မီနူးအောက် **sub-tab ၅ ခု** —
+
+| Tab | ပြသသည် |
+|-----|---------|
+| **Fee Payments** | Worker Management / Flight / Training fee အခြေအနေ (host line-item invoices ပါ၊ tax-inclusive due)၊ fee-type / outstanding filter၊ ရှာဖွေ၊ Excel/PDF |
+| **Student Introduction Fees** | ကျောင်းသား introduction fee status၊ filter / export |
+| **Upcoming Invoice (ရှေ့ ၁ လ)** | Management next-invoice ~၁ လ အတွင်း၊ ရက်ကျန် |
+| **Outstanding Balance** | ကျန်ငွေရှိ invoices (**host invoices အပါအဝင်**) |
+| **Contract Expiry** | စာချုပ်ကုန်ဆုံးရက် + ရက်ကျန် |
+
+Tab တိုင်း Excel / PDF export လုပ်နိုင်သည်။
+
+---
+
+## ၁၀။ Settings (ဆက်တင်)
+
+### ၁၀.၁ ပုံနှိပ် ဆက်တင် (Print Setting)
+
+- **Voucher 1** နှင့် **Voucher 2** — letterhead နှစ်ခု
+- Logo၊ Agency Name၊ Address၊ Phone၊ **Registration No.**၊ **FAX**
+- Invoice / Payment voucher preview တွင် tab ဖြင့် ပြောင်းပြသည်
+- Slot တစ်ခုချင်း Save
+
+### ၁၀.၂ ဘဏ်အကောင့်များ (Bank Accounts) — သီးခြား tab
+
+1. Label၊ Bank Name*၊ Branch Code၊ Branch Name၊ Account Number*၊ Account Holder*
+2. **Set as default** ရွေးနိုင်
+3. Invoice ဖန်တီး/ပြင်သည့်အခါ dropdown မှ ရွေး — ရွေးချိန်က **snapshot** အဖြစ် invoice ပေါ်တွင် မှတ်သည် (နောက်မှ bank ပြင်လည်း အဟောင်း invoice မပြောင်း)
+
+### ၁၀.၃ ငွေလဲနှုန်း (Currency Exchange)
+
+- JPY ↔ MMK ငွေလဲနှုန်း
+- ပြသမည့် ငွေကြေး — **JPY သို့မဟုတ် MMK** (radio)
+- Preview ပြသည်
+
+### ၁၀.၄ စနစ် ကိန်းရှင်များ (System Variables)
+
+အမျိုးအစားများ —
+
+- `visa_type`
+- `supervising_org`
+- `host_company` — **parent supervising org** လိုအပ်
+- `job_category`
+- `school_name` — Students ကျောင်းအမည်
+
+အသစ်ထည့် / ပြင် / ဖျက် / active-inactive လုပ်နိုင်သည်။
+
+### ၁၀.၅ အသုံးပြုသူ အကောင့်များ (User Accounts)
+
+- အကောင့် ဖန်တီး / ပြင် / ဖျက်
+- Module တိုင်း create/read/update/delete ခွင့် သတ်မှတ်
+- `users` permission လိုသည်
+
+Settings မြင်ရန် — `settings.read` သို့မဟုတ် `users.read`။
+
+---
+
+## ၁၁။ အသိပေးချက်များ (Notifications) + Web Push
+
+- Navbar **ခေါင်းလောင်း** နှိပ် → Notifications စာမျက်နှာ
+- ပြသသည် —
+  - Urgent management invoices (၇ ရက်)
+  - Contract expiry (Active၊ ၆၀ ရက်)
+- Filter — All / Invoices / Contracts
+- Mark all read၊ Invoices / Deployments သို့ ခုန်သွားနိုင်
+- Browser notification + Service Worker + Web Push (`VAPID` keys backend လို)
+- Permission ဖွင့် + **Send test push** စမ်းနိုင်
+- Login ပြီး permission ပေးထားရင် auto-subscribe ကြိုးစားသည်
+
+---
+
+## ၁၂။ ဘာသာစကား နှင့် Help Chat
+
+### UI ဘာသာ
+
+- Navbar / Login — **မြန်မာ / English / 日本語**
+- ရွေးချယ်မှု သိမ်းထားသည်
+
+### Help Chat
+
+- ခေါင်းစဉ် — **အကူအညီ (မြန်မာ)**
+- **မေး/ဖြေ မြန်မာလိုသာ** (UI ဘာသာ ဘာပဲရွေးရွေး)
+- တစ်ရက်လျှင် အသုံးပြုသူတစ်ဦး **၃၀ ကြိမ်** (Asia/Yangon နေ့ရက်)
+- ကျန်ကြိမ် — `ယနေ့ ကျန် X / 30`
+- မေးခွန်း အရှည် အများဆုံး ~၂၀၀၀ စာလုံး
+- စကားဝိုင်း မှတ်ဉာဏ် နောက်ဆုံး အလှည့် ~၈ ခု
+- Gemini API key မရှိရင် Help Chat မရ (503)
+- ဤလမ်းညွှန်စာရွက်တွင် မပါလျှင် မှန်းမဖြေရ
+
+---
+
+## ၁၃။ အကြံပြု အသုံးပြုအစဉ် (System တစ်ခုလုံး)
+
+1. Settings → **စနစ် ကိန်းရှင်များ** (visa / org / host / job / school)
+2. Settings → **ပုံနှိပ် ဆက်တင်** (Voucher 1 & 2၊ Registration၊ FAX၊ Logo)
+3. Settings → **ဘဏ်အကောင့်များ** — အနည်းဆုံး ၁ ခု (+ default)
+4. Settings → **ငွေလဲနှုန်း** (လိုအပ်ရင်)
+5. **အလုပ်သမား** / **ကျောင်းသား Profiles** ထည့် (သို့ Excel Import — Workers သာ)
+6. **ငွေစာရင်း** → Create Invoice (Attn, Subject, Tax, Bank)
+7. သို့မဟုတ် Students → **Introduction Fees** → School invoice
+8. Invoice Preview → Copy / PDF မျှဝေ
+9. Pay → Payment voucher View
+10. Reports / Notifications ဖြင့် စောင့်ကြည့်
+
+---
+
+## ၁၄။ မလုပ်သင့် / မဖြေသင့်သောအရာများ
 
 Help assistant သည် —
 
-- ဤ AgencyMS ဆော့ဖ်ဝဲ အသုံးပြုနည်းသာ ရှင်းပြရမည်။
-- ရာဇဝတ်မှု၊ hacking၊ API key ခိုးယူခြင်း၊ ပြင်ပအထွေထွေအကြောင်းအရာ မဖြေရ။
-- ဒေတာဘေ့စ်ထဲရှိ တကယ့် worker/invoice မှတ်တမ်း တစ်ခုချင်းကို ရှာမပေးနိုင် (စာရွက်လမ်းညွှန်အဆင့်သာ)။
-- Docs တွင် မပါသော လုပ်ဆောင်ချက်ကို မှန်းမဖြေဘဲ မသိကြောင်း ပြောရမည်။
+1. AgencyMS ဆော့ဖ်ဝဲ **အသုံးပြုနည်း** သာ ရှင်းပြရမည်။
+2. ဆော့ဖ်ဝဲနှင့် မသက်ဆိုင်သော အကြောင်းအရာ (သတင်း၊ ဟာသ၊ ပရိုဂရမ်မင်း သင်ခန်းစာ၊ ရာဇဝတ်မှု စသည်) ငြင်းရမည် — မြန်မာလို တိုတို။
+3. hacking၊ API key / စကားဝှက် တောင်းခြင်း မလုပ်ရ။
+4. ဒေတာဘေ့စ်ထဲရှိ တကယ့် worker / invoice မှတ်တမ်း တစ်ခုချင်း **ရှာမပေးရ** (လမ်းညွှန်အဆင့်သာ)။
+5. ဤစာရွက်တွင် မပါသော လုပ်ဆောင်ချက်ကို မှန်းမဖြေဘဲ **မသိကြောင်း** ပြောရမည်။
+6. မေးခွန်းနှင့် အဖြေကို **မြန်မာဘာသာဖြင့်သာ** ရေးရမည်။ အခြားဘာသာဖြင့် မေးလာပါက မြန်မာလို ပြန်မေးခိုင်းပါ။
