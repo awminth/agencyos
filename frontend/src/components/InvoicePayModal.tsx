@@ -4,6 +4,7 @@ import { Banknote, X } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import type { MoneyCurrency } from '../utils/currency';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 interface InvoicePayModalProps {
   invoice: Invoice;
@@ -18,17 +19,31 @@ export const InvoicePayModal: React.FC<InvoicePayModalProps> = ({
 }) => {
   const { t } = useLanguage();
   const { formatMoney } = useCurrency();
-  const [amount, setAmount] = useState(
-    Math.max(0, invoice.outstandingAmount || invoice.totalAmount - invoice.amountReceived)
+  const outstanding = Math.max(
+    0,
+    Number(invoice.outstandingAmount) ||
+      invoiceAmountDue(invoice) - (Number(invoice.amountReceived) || 0)
   );
+  const [amount, setAmount] = useState(outstanding);
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [receiptNo, setReceiptNo] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (amount <= 0) return;
+    if (amount > outstanding + 0.009) {
+      setError(
+        `Amount exceeds outstanding balance (${formatMoney(
+          outstanding,
+          invoice.currency as MoneyCurrency
+        )})`
+      );
+      return;
+    }
+    setError('');
     setSaving(true);
     try {
       await onSubmit({
@@ -38,6 +53,8 @@ export const InvoicePayModal: React.FC<InvoicePayModalProps> = ({
         notes: notes || undefined,
         currency: invoice.currency as MoneyCurrency,
       });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payment failed');
     } finally {
       setSaving(false);
     }
@@ -70,9 +87,14 @@ export const InvoicePayModal: React.FC<InvoicePayModalProps> = ({
           <p className="text-xs text-slate-500">
             {t('invoices.outstanding')}:{' '}
             <strong className="text-amber-700">
-              {formatMoney(invoice.outstandingAmount || 0, invoice.currency as MoneyCurrency)}
+              {formatMoney(outstanding, invoice.currency as MoneyCurrency)}
             </strong>
           </p>
+          {error && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+              {error}
+            </p>
+          )}
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">
               {t('invoices.payAmount')} *
@@ -80,10 +102,14 @@ export const InvoicePayModal: React.FC<InvoicePayModalProps> = ({
             <input
               type="number"
               min={0.01}
+              max={outstanding || undefined}
               step="any"
               required
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => {
+                setAmount(Number(e.target.value));
+                setError('');
+              }}
               className={`${inputClass} font-mono font-bold`}
             />
           </div>
@@ -131,7 +157,7 @@ export const InvoicePayModal: React.FC<InvoicePayModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={saving || amount <= 0}
+              disabled={saving || amount <= 0 || amount > outstanding + 0.009}
               className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
             >
               {saving ? t('common.loading') : t('invoices.paySubmit')}

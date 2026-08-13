@@ -19,7 +19,24 @@ CREATE TABLE IF NOT EXISTS print_settings (
   agency_name VARCHAR(200) NOT NULL DEFAULT '',
   address TEXT NULL,
   phone VARCHAR(50) NULL,
+  registration_no VARCHAR(80) NULL,
+  fax VARCHAR(50) NULL,
   logo_data LONGTEXT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id VARCHAR(64) PRIMARY KEY,
+  label VARCHAR(100) NOT NULL DEFAULT '',
+  bank_name VARCHAR(150) NOT NULL DEFAULT '',
+  branch_code VARCHAR(50) NULL,
+  branch_name VARCHAR(150) NULL,
+  account_number VARCHAR(50) NOT NULL DEFAULT '',
+  account_holder VARCHAR(150) NOT NULL DEFAULT '',
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
@@ -102,6 +119,15 @@ CREATE TABLE IF NOT EXISTS invoices (
   status ENUM('Pending', 'Partial', 'Paid', 'Overdue') NOT NULL DEFAULT 'Pending',
   currency ENUM('JPY', 'MMK', 'USD') NOT NULL DEFAULT 'JPY',
   notes TEXT NULL,
+  billed_to_attn VARCHAR(200) NULL,
+  subject VARCHAR(255) NULL,
+  tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  bank_account_id VARCHAR(64) NULL,
+  bank_name VARCHAR(150) NULL,
+  branch_code VARCHAR(50) NULL,
+  branch_name VARCHAR(150) NULL,
+  account_number VARCHAR(50) NULL,
+  account_holder VARCHAR(150) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE SET NULL
 );
@@ -183,6 +209,15 @@ CREATE TABLE IF NOT EXISTS student_invoices (
   status ENUM('Pending', 'Partial', 'Paid', 'Overdue') NOT NULL DEFAULT 'Pending',
   currency ENUM('JPY', 'MMK', 'USD') NOT NULL DEFAULT 'JPY',
   notes TEXT NULL,
+  billed_to_attn VARCHAR(200) NULL,
+  subject VARCHAR(255) NULL,
+  tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  bank_account_id VARCHAR(64) NULL,
+  bank_name VARCHAR(150) NULL,
+  branch_code VARCHAR(50) NULL,
+  branch_name VARCHAR(150) NULL,
+  account_number VARCHAR(50) NULL,
+  account_holder VARCHAR(150) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
 );

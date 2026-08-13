@@ -4,6 +4,7 @@ import { X, GraduationCap, PlaneTakeoff, DollarSign, Edit, Receipt } from 'lucid
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import type { MoneyCurrency } from '../utils/currency';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 interface StudentDetailModalProps {
   student: Student;
@@ -34,7 +35,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       invoice.studentId === student.id ||
       invoice.lines?.some((line) => line.studentId === student.id)
   );
-  const totalBilled = studentInvoices.reduce((sum, invoice) => sum + (invoice.totalAmount || 0), 0);
+  const totalBilled = studentInvoices.reduce((sum, invoice) => sum + invoiceAmountDue(invoice), 0);
   const totalPaid = studentInvoices.reduce((sum, invoice) => sum + (invoice.amountReceived || 0), 0);
   const totalRemain = studentInvoices.reduce(
     (sum, invoice) => sum + (invoice.outstandingAmount || 0),
@@ -194,7 +195,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
                     <div className="text-right font-mono">
                       <div className="text-slate-700">
-                        {t('invoices.total')}: {money(invoice.totalAmount, invoice.currency)}
+                        {t('invoices.total')}: {money(invoiceAmountDue(invoice), invoice.currency)}
                       </div>
                       <div className="font-bold text-amber-700">
                         {t('invoices.outstanding')}: {money(invoice.outstandingAmount, invoice.currency)}

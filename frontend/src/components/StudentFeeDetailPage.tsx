@@ -14,7 +14,6 @@ import { useCurrency } from '../context/CurrencyContext';
 import type { MoneyCurrency } from '../utils/currency';
 import { can } from '../utils/permissions';
 import { InvoicePayModal } from './InvoicePayModal';
-import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { PrintableInvoiceModal } from './PrintableInvoiceModal';
 import { PaymentVoucherSheet } from './PaymentVoucherSheet';
 import { MobileMeta } from './MobileMeta';
@@ -25,6 +24,7 @@ import {
   balanceRemainClass,
   balanceTone,
 } from '../utils/invoiceBalanceUi';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 function invoiceStatusClass(status: InvoiceStatus) {
   return invoiceStatusBadgeClass(status);
@@ -36,6 +36,11 @@ function invoiceStatusKey(status: InvoiceStatus) {
     | 'status.partial'
     | 'status.paid'
     | 'status.overdue';
+}
+
+function canRecordPayment(inv: { status?: string; outstandingAmount?: number }): boolean {
+  if (inv.status === 'Paid') return false;
+  return (Number(inv.outstandingAmount) || 0) > 0;
 }
 
 interface StudentFeeDetailPageProps {
@@ -60,7 +65,7 @@ export function buildSchoolSummaries(invoices: StudentInvoice[]): StudentInvoice
         schoolName,
         studentCount: lineCount,
         feeType: 'introduction',
-        totalAmount: invoice.totalAmount || 0,
+        totalAmount: invoiceAmountDue(invoice),
         totalPaid: invoice.amountReceived || 0,
         remainAmount: invoice.outstandingAmount || 0,
         invoiceCount: 1,
@@ -68,7 +73,7 @@ export function buildSchoolSummaries(invoices: StudentInvoice[]): StudentInvoice
         lastPaymentDate: payDate,
       });
     } else {
-      existing.totalAmount += invoice.totalAmount || 0;
+      existing.totalAmount += invoiceAmountDue(invoice);
       existing.totalPaid += invoice.amountReceived || 0;
       existing.remainAmount += invoice.outstandingAmount || 0;
       existing.invoiceCount += 1;
@@ -102,6 +107,8 @@ function toSharedInvoice(invoice: StudentInvoice): Invoice {
     lastInvoiceDate: invoice.lastInvoiceDate,
     nextInvoiceDate: invoice.nextInvoiceDate,
     totalAmount: invoice.totalAmount,
+    taxAmount: invoice.taxAmount,
+    amountDue: invoice.amountDue,
     amountReceived: invoice.amountReceived,
     outstandingAmount: invoice.outstandingAmount,
     paymentReceivedDate: invoice.paymentReceivedDate,
@@ -110,7 +117,26 @@ function toSharedInvoice(invoice: StudentInvoice): Invoice {
     status: invoice.status,
     currency: invoice.currency,
     notes: invoice.notes,
+    billedToAttn: invoice.billedToAttn,
+    subject: invoice.subject,
+    taxRate: invoice.taxRate,
+    bankAccountId: invoice.bankAccountId,
+    bankName: invoice.bankName,
+    branchCode: invoice.branchCode,
+    branchName: invoice.branchName,
+    accountNumber: invoice.accountNumber,
+    accountHolder: invoice.accountHolder,
     createdAt: invoice.createdAt,
+    lines: (invoice.lines || []).map((line) => ({
+      id: line.id,
+      invoiceId: line.invoiceId,
+      workerId: line.studentId,
+      workerName: line.studentName,
+      serialNo: line.serialNo,
+      passportNo: line.passportNo,
+      amount: line.amount,
+    })),
+    workerCount: invoice.studentCount ?? invoice.lines?.length,
   };
 }
 
@@ -169,14 +195,13 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
   const [payments, setPayments] = useState<StudentInvoicePayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [payInvoice, setPayInvoice] = useState<StudentInvoice | null>(null);
-  const [viewInvoice, setViewInvoice] = useState<StudentInvoice | null>(null);
   const [printableInvoice, setPrintableInvoice] = useState<StudentInvoice | null>(null);
   const [viewPayment, setViewPayment] = useState<StudentInvoicePayment | null>(null);
   const [viewSummaryVoucher, setViewSummaryVoucher] = useState(false);
 
   const paymentBalance = (payment: StudentInvoicePayment) => {
     const invoice = schoolInvoices.find((item) => item.id === payment.invoiceId);
-    const invoiceTotal = invoice?.totalAmount ?? summary.totalAmount;
+    const invoiceTotal = invoice ? invoiceAmountDue(invoice) : summary.totalAmount;
 
     const siblings = payments
       .filter((item) => item.invoiceId === payment.invoiceId)
@@ -374,7 +399,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                         label: t('invoices.colDates'),
                         value: `${t('invoices.last')}: ${invoice.lastInvoiceDate || '—'} · ${t('invoices.next')}: ${invoice.nextInvoiceDate || '—'}`,
                       },
-                      { label: t('invoices.total'), value: money(invoice.totalAmount, invoice.currency) },
+                      { label: t('invoices.total'), value: money(invoiceAmountDue(invoice), invoice.currency) },
                       {
                         label: t('invoices.received'),
                         value: (
@@ -392,7 +417,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                         value: (
                           <span
                             className={`font-semibold ${balanceRemainClass(
-                              balanceTone(invoice.outstandingAmount, invoice.totalAmount)
+                              balanceTone(invoice.outstandingAmount, invoiceAmountDue(invoice))
                             )}`}
                           >
                             {money(invoice.outstandingAmount, invoice.currency)}
@@ -413,22 +438,42 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                   )}
                   <div className="action-group mt-2">
                     {canRead && (
-                      <button type="button" className="action-btn" title={t('common.view')} onClick={() => setViewInvoice(invoice)}>
+                      <button
+                        type="button"
+                        className="action-btn"
+                        title={t('invoices.formalPreview')}
+                        onClick={() => setPrintableInvoice(invoice)}
+                      >
                         <Eye className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {canUpdate && (
-                      <button type="button" className="action-btn action-btn-blue" title={t('invoices.pay')} onClick={() => setPayInvoice(invoice)}>
+                    {canUpdate && canRecordPayment(invoice) && (
+                      <button
+                        type="button"
+                        className="action-btn action-btn-blue"
+                        title={t('invoices.pay')}
+                        onClick={() => setPayInvoice(invoice)}
+                      >
                         <Banknote className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canUpdate && (
-                      <button type="button" className="action-btn" title={t('common.edit')} onClick={() => onEditInvoice(invoice)}>
+                      <button
+                        type="button"
+                        className="action-btn"
+                        title={t('common.edit')}
+                        onClick={() => onEditInvoice(invoice)}
+                      >
                         <Edit className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canDelete && (
-                      <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => onDeleteInvoice(invoice.id)}>
+                      <button
+                        type="button"
+                        className="action-btn action-btn-red"
+                        title={t('common.delete')}
+                        onClick={() => onDeleteInvoice(invoice.id)}
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -479,7 +524,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                       </td>
                       <td className="text-right">
                         <div className="cell-stack items-end">
-                          <span className="cell-mono">{money(invoice.totalAmount, invoice.currency)}</span>
+                          <span className="cell-mono">{money(invoiceAmountDue(invoice), invoice.currency)}</span>
                           <span
                             className={`cell-mono ${
                               invoice.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
@@ -489,7 +534,7 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                           </span>
                           <span
                             className={`cell-mono font-semibold ${balanceRemainClass(
-                              balanceTone(invoice.outstandingAmount, invoice.totalAmount)
+                              balanceTone(invoice.outstandingAmount, invoiceAmountDue(invoice))
                             )}`}
                           >
                             {money(invoice.outstandingAmount, invoice.currency)}
@@ -512,22 +557,42 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
                       <td className="text-right">
                         <div className="action-group justify-end">
                           {canRead && (
-                            <button type="button" className="action-btn" title={t('common.view')} onClick={() => setViewInvoice(invoice)}>
+                            <button
+                              type="button"
+                              className="action-btn"
+                              title={t('invoices.formalPreview')}
+                              onClick={() => setPrintableInvoice(invoice)}
+                            >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {canUpdate && (
-                            <button type="button" className="action-btn action-btn-blue" title={t('invoices.pay')} onClick={() => setPayInvoice(invoice)}>
+                          {canUpdate && canRecordPayment(invoice) && (
+                            <button
+                              type="button"
+                              className="action-btn action-btn-blue"
+                              title={t('invoices.pay')}
+                              onClick={() => setPayInvoice(invoice)}
+                            >
                               <Banknote className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {canUpdate && (
-                            <button type="button" className="action-btn" title={t('common.edit')} onClick={() => onEditInvoice(invoice)}>
+                            <button
+                              type="button"
+                              className="action-btn"
+                              title={t('common.edit')}
+                              onClick={() => onEditInvoice(invoice)}
+                            >
                               <Edit className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {canDelete && (
-                            <button type="button" className="action-btn action-btn-red" title={t('common.delete')} onClick={() => onDeleteInvoice(invoice.id)}>
+                            <button
+                              type="button"
+                              className="action-btn action-btn-red"
+                              title={t('common.delete')}
+                              onClick={() => onDeleteInvoice(invoice.id)}
+                            >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
@@ -644,27 +709,6 @@ export const StudentFeeDetailPage: React.FC<StudentFeeDetailPageProps> = ({
           invoice={toSharedInvoice(payInvoice)}
           onClose={() => setPayInvoice(null)}
           onSubmit={handlePay}
-        />
-      )}
-      {viewInvoice && (
-        <InvoiceDetailSheet
-          invoice={toSharedInvoice(viewInvoice)}
-          canRead={canRead}
-          canUpdate={canUpdate}
-          canDelete={canDelete}
-          onClose={() => setViewInvoice(null)}
-          onPrint={() => {
-            setPrintableInvoice(viewInvoice);
-            setViewInvoice(null);
-          }}
-          onEdit={() => {
-            onEditInvoice(viewInvoice);
-            setViewInvoice(null);
-          }}
-          onDelete={() => {
-            void onDeleteInvoice(viewInvoice.id);
-            setViewInvoice(null);
-          }}
         />
       )}
       {printableInvoice && (

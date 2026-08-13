@@ -11,6 +11,7 @@
     "start": "node server.js",
     "init-db": "tsx scripts/init-db.ts",
     "seed:test-fees": "tsx scripts/seed-test-fees.ts",
+    "clean:all-data": "tsx scripts/clean-all-data.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

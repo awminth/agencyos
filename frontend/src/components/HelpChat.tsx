@@ -17,7 +17,7 @@ interface UiMessage {
 }
 
 const WELCOME =
-  'မင်္ဂလာပါ။ AgencyMS အသုံးပြုနည်းကို မြန်မာလို မေးနိုင်ပါသည်။ တစ်ရက်လျှင် အကြိမ် ၃၀ အထိ မေးနိုင်ပါသည်။';
+  'မင်္ဂလာပါ။ AgencyMS အသုံးပြုနည်း (Workers၊ Formal Invoice၊ Tax၊ Bank Account၊ Copy/PDF၊ Payment) ကို မြန်မာလို မေးနိုင်ပါသည်။ တစ်ရက်လျှင် အကြိမ် ၃၀ အထိ မေးနိုင်ပါသည်။';
 
 export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
   const [open, setOpen] = useState(false);

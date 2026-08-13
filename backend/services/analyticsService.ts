@@ -36,6 +36,16 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     FROM invoices
   `);
 
+  const [[studentInvoiceCounts]] = await pool.query<RowDataPacket[]>(`
+    SELECT
+      COALESCE(SUM(outstanding_amount), 0) AS totalOutstandingAmountJPY,
+      COALESCE(SUM(amount_received), 0) AS totalCollectedAmountJPY,
+      SUM(status IN ('Pending', 'Partial')) AS pendingInvoicesCount,
+      COUNT(*) AS totalInvoicesCount,
+      SUM(amount_received > 0 AND receipt_sent_date IS NULL) AS unsentReceiptsCount
+    FROM student_invoices
+  `);
+
   const totalWorkers = num(workerCounts.totalWorkers);
   const abscondedWorkers = num(workerCounts.abscondedWorkers);
 
@@ -46,12 +56,19 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     abscondedWorkers,
     abscondingRate:
       totalWorkers > 0 ? parseFloat(((abscondedWorkers / totalWorkers) * 100).toFixed(1)) : 0,
-    totalInvoicesCount: num(invoiceCounts.totalInvoicesCount),
-    pendingInvoicesCount: num(invoiceCounts.pendingInvoicesCount),
+    totalInvoicesCount:
+      num(invoiceCounts.totalInvoicesCount) + num(studentInvoiceCounts.totalInvoicesCount),
+    pendingInvoicesCount:
+      num(invoiceCounts.pendingInvoicesCount) + num(studentInvoiceCounts.pendingInvoicesCount),
     upcomingInvoicesCount7Days: num(invoiceCounts.upcomingInvoicesCount7Days),
     contractExpiring30DaysCount: num(expiring.c),
-    totalOutstandingAmountJPY: num(invoiceCounts.totalOutstandingAmountJPY),
-    totalCollectedAmountJPY: num(invoiceCounts.totalCollectedAmountJPY),
-    unsentReceiptsCount: num(invoiceCounts.unsentReceiptsCount),
+    totalOutstandingAmountJPY:
+      num(invoiceCounts.totalOutstandingAmountJPY) +
+      num(studentInvoiceCounts.totalOutstandingAmountJPY),
+    totalCollectedAmountJPY:
+      num(invoiceCounts.totalCollectedAmountJPY) +
+      num(studentInvoiceCounts.totalCollectedAmountJPY),
+    unsentReceiptsCount:
+      num(invoiceCounts.unsentReceiptsCount) + num(studentInvoiceCounts.unsentReceiptsCount),
   };
 }

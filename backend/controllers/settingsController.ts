@@ -15,6 +15,9 @@ export async function updatePrint(req: Request, res: Response): Promise<void> {
     agencyName: typeof req.body?.agencyName === 'string' ? req.body.agencyName : undefined,
     address: typeof req.body?.address === 'string' ? req.body.address : undefined,
     phone: typeof req.body?.phone === 'string' ? req.body.phone : undefined,
+    registrationNo:
+      typeof req.body?.registrationNo === 'string' ? req.body.registrationNo : undefined,
+    fax: typeof req.body?.fax === 'string' ? req.body.fax : undefined,
     logoData:
       req.body?.logoData === null
         ? null
@@ -23,6 +26,50 @@ export async function updatePrint(req: Request, res: Response): Promise<void> {
           : undefined,
   });
   res.json(settings);
+}
+
+export async function listBankAccounts(req: Request, res: Response): Promise<void> {
+  const activeOnly = req.query.activeOnly === '1' || req.query.activeOnly === 'true';
+  const accounts = await settingsService.listBankAccounts(activeOnly);
+  res.json(accounts);
+}
+
+export async function createBankAccount(req: Request, res: Response): Promise<void> {
+  const account = await settingsService.createBankAccount({
+    label: typeof req.body?.label === 'string' ? req.body.label : undefined,
+    bankName: typeof req.body?.bankName === 'string' ? req.body.bankName : undefined,
+    branchCode: typeof req.body?.branchCode === 'string' ? req.body.branchCode : undefined,
+    branchName: typeof req.body?.branchName === 'string' ? req.body.branchName : undefined,
+    accountNumber:
+      typeof req.body?.accountNumber === 'string' ? req.body.accountNumber : undefined,
+    accountHolder:
+      typeof req.body?.accountHolder === 'string' ? req.body.accountHolder : undefined,
+    isDefault: typeof req.body?.isDefault === 'boolean' ? req.body.isDefault : undefined,
+    sortOrder: typeof req.body?.sortOrder === 'number' ? req.body.sortOrder : undefined,
+  });
+  res.status(201).json(account);
+}
+
+export async function updateBankAccount(req: Request, res: Response): Promise<void> {
+  const account = await settingsService.updateBankAccount(req.params.id, {
+    label: typeof req.body?.label === 'string' ? req.body.label : undefined,
+    bankName: typeof req.body?.bankName === 'string' ? req.body.bankName : undefined,
+    branchCode: typeof req.body?.branchCode === 'string' ? req.body.branchCode : undefined,
+    branchName: typeof req.body?.branchName === 'string' ? req.body.branchName : undefined,
+    accountNumber:
+      typeof req.body?.accountNumber === 'string' ? req.body.accountNumber : undefined,
+    accountHolder:
+      typeof req.body?.accountHolder === 'string' ? req.body.accountHolder : undefined,
+    isDefault: typeof req.body?.isDefault === 'boolean' ? req.body.isDefault : undefined,
+    sortOrder: typeof req.body?.sortOrder === 'number' ? req.body.sortOrder : undefined,
+    isActive: typeof req.body?.isActive === 'boolean' ? req.body.isActive : undefined,
+  });
+  res.json(account);
+}
+
+export async function deleteBankAccount(req: Request, res: Response): Promise<void> {
+  await settingsService.deleteBankAccount(req.params.id);
+  res.json({ success: true });
 }
 
 export async function getCurrency(req: Request, res: Response): Promise<void> {

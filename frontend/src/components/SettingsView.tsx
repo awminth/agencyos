@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Users as UsersIcon,
   Coins,
+  Landmark,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
@@ -17,6 +18,7 @@ import { ExportButtons } from './ExportButtons';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { formatMoneyValue } from '../utils/currency';
 import { UserAccountsView } from './UserAccountsView';
+import { BankAccountsSettings } from './BankAccountsSettings';
 import { AuthUser } from '../types';
 import { can } from '../utils/permissions';
 import { confirmDelete, showError, showSuccess } from '../utils/swal';
@@ -34,6 +36,8 @@ interface PrintSettings {
   agencyName: string;
   address: string;
   phone: string;
+  registrationNo: string;
+  fax: string;
   logoData: string | null;
 }
 
@@ -66,7 +70,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
   const canSettingsUpdate = can(currentUser.permissions, 'settings', 'update');
   const canSettingsCreate = can(currentUser.permissions, 'settings', 'create');
   const canSettingsDelete = can(currentUser.permissions, 'settings', 'delete');
-  const [tab, setTab] = useState<'print' | 'currency' | 'variables' | 'users'>(
+  const [tab, setTab] = useState<'print' | 'banks' | 'currency' | 'variables' | 'users'>(
     canUsers && !can(currentUser.permissions, 'settings', 'read') ? 'users' : 'print'
   );
 
@@ -75,12 +79,16 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     agencyName: '',
     address: '',
     phone: '',
+    registrationNo: '',
+    fax: '',
     logoData: null,
   });
   const [printForm2, setPrintForm2] = useState<PrintSettings>({
     agencyName: '',
     address: '',
     phone: '',
+    registrationNo: '',
+    fax: '',
     logoData: null,
   });
   const [printSaving, setPrintSaving] = useState(false);
@@ -113,12 +121,16 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           agencyName: pRes.voucher1?.agencyName || '',
           address: pRes.voucher1?.address || '',
           phone: pRes.voucher1?.phone || '',
+          registrationNo: pRes.voucher1?.registrationNo || '',
+          fax: pRes.voucher1?.fax || '',
           logoData: pRes.voucher1?.logoData || null,
         });
         setPrintForm2({
           agencyName: pRes.voucher2?.agencyName || '',
           address: pRes.voucher2?.address || '',
           phone: pRes.voucher2?.phone || '',
+          registrationNo: pRes.voucher2?.registrationNo || '',
+          fax: pRes.voucher2?.fax || '',
           logoData: pRes.voucher2?.logoData || null,
         });
       } else {
@@ -126,6 +138,8 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           agencyName: pRes.agencyName || '',
           address: pRes.address || '',
           phone: pRes.phone || '',
+          registrationNo: pRes.registrationNo || '',
+          fax: pRes.fax || '',
           logoData: pRes.logoData || null,
         };
         setPrintForm1(flat);
@@ -178,12 +192,16 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           agencyName: data.voucher1?.agencyName || '',
           address: data.voucher1?.address || '',
           phone: data.voucher1?.phone || '',
+          registrationNo: data.voucher1?.registrationNo || '',
+          fax: data.voucher1?.fax || '',
           logoData: data.voucher1?.logoData || null,
         });
         setPrintForm2({
           agencyName: data.voucher2?.agencyName || '',
           address: data.voucher2?.address || '',
           phone: data.voucher2?.phone || '',
+          registrationNo: data.voucher2?.registrationNo || '',
+          fax: data.voucher2?.fax || '',
           logoData: data.voucher2?.logoData || null,
         });
       }
@@ -355,6 +373,18 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           </button>
           <button
             type="button"
+            onClick={() => setTab('banks')}
+            className={`flex cursor-pointer items-center gap-1.5 rounded-t-lg px-4 py-2 text-xs font-bold transition ${
+              tab === 'banks'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Landmark className="h-3.5 w-3.5" />
+            {t('settings.bankTab')}
+          </button>
+          <button
+            type="button"
             onClick={() => setTab('currency')}
             className={`flex cursor-pointer items-center gap-1.5 rounded-t-lg px-4 py-2 text-xs font-bold transition ${
               tab === 'currency'
@@ -506,6 +536,34 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
                 />
               </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    {t('settings.registrationNo')}
+                  </label>
+                  <input
+                    type="text"
+                    value={printForm.registrationNo}
+                    onChange={(e) =>
+                      setPrintForm((p) => ({ ...p, registrationNo: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    {t('settings.fax')}
+                  </label>
+                  <input
+                    type="text"
+                    value={printForm.fax}
+                    onChange={(e) =>
+                      setPrintForm((p) => ({ ...p, fax: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -524,6 +582,16 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
               ? t('common.loading')
               : `${t('settings.savePrint')} (${printSlot === 1 ? t('settings.voucherSlot1') : t('settings.voucherSlot2')})`}
           </button>
+        </div>
+      )}
+
+      {tab === 'banks' && (
+        <div className="bento-card p-5">
+          <BankAccountsSettings
+            canCreate={canSettingsCreate}
+            canUpdate={canSettingsUpdate}
+            canDelete={canSettingsDelete}
+          />
         </div>
       )}
 

@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Invoice } from '../types';
 import { Building2 } from 'lucide-react';
-import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
-import type { MoneyCurrency } from '../utils/currency';
-import { PosPrintPreview, PosReceipt } from './PosPrintPreview';
-
-interface PrintSettings {
-  agencyName: string;
-  address: string;
-  phone: string;
-  logoData: string | null;
-}
+import { DocumentSharePreview } from './DocumentSharePreview';
+import { FormalInvoiceDocument } from './FormalInvoiceDocument';
+import { VoucherSlotTabs } from './VoucherSlotTabs';
+import {
+  EMPTY_LETTERHEAD,
+  parsePrintLetterheads,
+  type PrintLetterhead,
+} from '../utils/printLetterhead';
 
 interface PrintableInvoiceModalProps {
   invoice: Invoice;
@@ -23,131 +21,38 @@ export const PrintableInvoiceModal: React.FC<PrintableInvoiceModalProps> = ({
   onClose,
 }) => {
   const { t } = useLanguage();
-  const { formatMoney } = useCurrency();
-  const money = (amount: number) =>
-    formatMoney(amount, (invoice.currency as MoneyCurrency) || 'JPY');
-  const [printSettings, setPrintSettings] = useState<PrintSettings>({
-    agencyName: '',
-    address: '',
-    phone: '',
-    logoData: null,
-  });
+  const [voucher1, setVoucher1] = useState<PrintLetterhead>(EMPTY_LETTERHEAD);
+  const [voucher2, setVoucher2] = useState<PrintLetterhead>(EMPTY_LETTERHEAD);
+  const [activeSlot, setActiveSlot] = useState<1 | 2>(1);
 
   useEffect(() => {
     fetch('/api/settings/print')
       .then((r) => r.json())
       .then((data) => {
-        const src = data?.voucher1 || data;
-        setPrintSettings({
-          agencyName: src.agencyName || '',
-          address: src.address || '',
-          phone: src.phone || '',
-          logoData: src.logoData || null,
-        });
+        const both = parsePrintLetterheads(data);
+        setVoucher1(both.voucher1);
+        setVoucher2(both.voucher2);
       })
       .catch(() => undefined);
   }, []);
 
-  const agencyName = printSettings.agencyName || 'Overseas Employment Agency';
-  const contactLine = [
-    printSettings.address,
-    printSettings.phone ? `Tel: ${printSettings.phone}` : '',
-  ]
-    .filter(Boolean)
-    .join(' | ');
-
-  const isStudent = invoice.feeType === 'introduction';
-  const isHostInvoice = !isStudent && Boolean(invoice.hostCompany);
-  const subjectLabel = isStudent ? 'Student' : isHostInvoice ? 'Host Company' : 'Worker';
-  const serviceLabel =
-    invoice.feeType === 'flight'
-      ? 'Flight Fee'
-      : invoice.feeType === 'training'
-        ? 'Training Fee'
-        : isStudent
-          ? 'Introduction Fee'
-          : 'Management & Support Fee';
-
-  const fields = [
-    {
-      label: isStudent ? t('students.schoolName') : 'Host / AO',
-      value: isStudent
-        ? invoice.supervisingOrg || invoice.workerName || invoice.hostCompany
-        : invoice.hostCompany,
-    },
-    ...(isStudent
-      ? [
-          {
-            label: t('students.studentCount'),
-            value: invoice.passportNo || '—',
-          },
-        ]
-      : [{ label: 'Supervising Org', value: invoice.supervisingOrg || '—' }]),
-    { label: 'Billing Cycle', value: invoice.billingPeriod },
-    {
-      label: subjectLabel,
-      value: isStudent
-        ? invoice.supervisingOrg || invoice.workerName
-        : isHostInvoice
-          ? invoice.hostCompany
-          : invoice.workerName,
-    },
-    ...(isStudent || isHostInvoice
-      ? isHostInvoice
-        ? [
-            {
-              label: t('invoices.workerCount'),
-              value: String(invoice.workerCount ?? invoice.lines?.length ?? 0),
-            },
-          ]
-        : []
-      : [{ label: 'Passport', value: invoice.passportNo }]),
-    { label: 'Next Due', value: invoice.nextInvoiceDate || '—' },
-    { label: 'Service', value: serviceLabel },
-    { label: t('invoices.totalAmount'), value: money(invoice.totalAmount) },
-    { label: t('invoices.totalPaid'), value: money(invoice.amountReceived) },
-    { label: t('invoices.remainAmount'), value: money(invoice.outstandingAmount) },
-  ];
-
-  const extraRows = invoice.receiptNo
-    ? [
-        {
-          label: 'Receipt No',
-          value: `${invoice.receiptNo}${invoice.paymentReceivedDate ? ` (${invoice.paymentReceivedDate})` : ''}`,
-        },
-      ]
-    : undefined;
+  const issuer = activeSlot === 1 ? voucher1 : voucher2;
+  const printAreaId = `formal-invoice-print-area-${activeSlot}`;
+  const filename = `Invoice_V${activeSlot}_${invoice.invoiceNo}`;
+  const slotLabel =
+    activeSlot === 1 ? t('settings.voucherSlot1') : t('settings.voucherSlot2');
 
   return (
-    <PosPrintPreview
-      title="Invoice / Receipt Preview"
-      printAreaId="official-invoice-print-area"
-      printFilename={`Invoice_${invoice.invoiceNo}`}
+    <DocumentSharePreview
+      title={`${t('invoices.formalPreview')} (${slotLabel})`}
+      subtitle={invoice.invoiceNo}
+      printAreaId={printAreaId}
+      printFilename={filename}
       icon={Building2}
       onClose={onClose}
+      toolbar={<VoucherSlotTabs activeSlot={activeSlot} onChange={setActiveSlot} />}
     >
-      <PosReceipt
-        id="official-invoice-print-area"
-        agencyName={agencyName}
-        contactLine={contactLine || undefined}
-        logoData={printSettings.logoData}
-        badge="INVOICE"
-        dateLabel={`Date: ${invoice.lastInvoiceDate}`}
-        title={invoice.invoiceNo}
-        subtitle="Overseas Employment Service"
-        fields={fields}
-        amountLabel={t('invoices.remainAmount')}
-        amountValue={money(invoice.outstandingAmount)}
-        status={invoice.status}
-        notes={
-          invoice.notes ||
-          'Payment due within 15 days from issue date via bank wire transfer.'
-        }
-        notesLabel="Payment Notes"
-        extraRows={extraRows}
-        footerLeft="Prepared By"
-        footerRight="Authorized"
-      />
-    </PosPrintPreview>
+      <FormalInvoiceDocument id={printAreaId} invoice={invoice} issuer={issuer} />
+    </DocumentSharePreview>
   );
 };

@@ -4,6 +4,10 @@ import { ArrowLeft, Receipt, Save, Building2 } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import { currencySymbol, type MoneyCurrency } from '../utils/currency';
+import {
+  FormalInvoiceFields,
+  type FormalInvoiceFormValues,
+} from './FormalInvoiceFields';
 
 interface SystemVariable {
   id: string;
@@ -87,6 +91,12 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
   );
   const [receiptSentDate, setReceiptSentDate] = useState(invoice?.receiptSentDate || '');
   const [notes, setNotes] = useState(invoice?.notes || '');
+  const [formal, setFormal] = useState<FormalInvoiceFormValues>({
+    billedToAttn: invoice?.billedToAttn || 'Management / Representatives',
+    subject: invoice?.subject || '',
+    taxRate: invoice?.taxRate ?? 10,
+    bankAccountId: invoice?.bankAccountId || '',
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -139,7 +149,13 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
   useEffect(() => {
     if (!isEdit) {
       setTotalAmount(computedTotal);
-      if (selectedHost) setBillingPeriod(periodForFee(feeType, selectedHost));
+      if (selectedHost) {
+        setBillingPeriod(periodForFee(feeType, selectedHost));
+        setFormal((prev) => ({
+          ...prev,
+          subject: prev.subject || periodForFee(feeType, selectedHost),
+        }));
+      }
     }
   }, [computedTotal, selectedHost, feeType, isEdit]);
 
@@ -165,6 +181,10 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
       receiptSentDate: receiptSentDate || undefined,
       currency,
       notes,
+      billedToAttn: formal.billedToAttn,
+      subject: formal.subject,
+      taxRate: formal.taxRate,
+      bankAccountId: formal.bankAccountId,
     };
 
     setSaving(true);
@@ -399,7 +419,7 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
           <p className="text-[11px] text-slate-500">{t('invoices.hostInvoiceAmountHint')}</p>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">
-              {t('invoices.total')} ({currency})
+              {t('invoices.subtotalExcl')} ({currency})
             </label>
             <input
               type="number"
@@ -415,6 +435,14 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
             )}
           </div>
         </div>
+
+        <FormalInvoiceFields
+          values={formal}
+          onChange={setFormal}
+          subtotal={totalAmount}
+          currency={currency}
+          inputClass={inputClass}
+        />
 
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">
@@ -448,7 +476,13 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
           </button>
           <button
             type="submit"
-            disabled={saving || (!isEdit && hostWorkers.length === 0)}
+            disabled={
+              saving ||
+              (!isEdit && hostWorkers.length === 0) ||
+              !formal.bankAccountId ||
+              !formal.billedToAttn.trim() ||
+              !formal.subject.trim()
+            }
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />

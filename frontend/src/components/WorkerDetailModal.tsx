@@ -4,6 +4,7 @@ import { X, User, PlaneTakeoff, Receipt, DollarSign, Edit } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import type { MoneyCurrency } from '../utils/currency';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 interface WorkerDetailModalProps {
   worker: Worker;
@@ -39,7 +40,9 @@ export const WorkerDetailModal: React.FC<WorkerDetailModalProps> = ({
   const { t } = useLanguage();
   const money = (amount: number, currency?: string) =>
     formatMoney(amount, (currency as MoneyCurrency) || 'JPY');
-  const workerInvoices = invoices.filter((i) => i.workerId === worker.id);
+  const workerInvoices = invoices.filter(
+    (i) => i.workerId === worker.id || i.lines?.some((line) => line.workerId === worker.id)
+  );
   const notAvailable = t('workerDetail.notAvailable');
 
   return (
@@ -219,7 +222,7 @@ export const WorkerDetailModal: React.FC<WorkerDetailModalProps> = ({
                     </div>
                     <div className="text-right font-mono">
                       <div className="text-slate-700">
-                        {t('invoices.total')}: {money(inv.totalAmount, inv.currency)}
+                        {t('invoices.total')}: {money(invoiceAmountDue(inv), inv.currency)}
                       </div>
                       <div className="font-bold text-amber-700">
                         {t('invoices.outstanding')}: {money(inv.outstandingAmount, inv.currency)}

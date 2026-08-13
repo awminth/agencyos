@@ -7,7 +7,7 @@ import { pingDb } from './config/db.js';
 import { env, isWebPushConfigured } from './config/env.js';
 import { ensurePermissionsColumn } from './services/usersService.js';
 import { ensureFinancialConfigCurrency } from './services/workerService.js';
-import { ensureSchoolNameCategory, ensureVariableParentValue, ensurePrintSettingsSlots } from './services/settingsService.js';
+import { ensureSchoolNameCategory, ensureVariableParentValue, ensurePrintSettingsSlots, ensureBankAccountsTable } from './services/settingsService.js';
 import { ensureSchoolInvoiceSchema } from './services/studentInvoiceService.js';
 import { ensureHostInvoiceSchema } from './services/invoiceService.js';
 import {
@@ -28,6 +28,7 @@ async function start() {
     await ensureSchoolNameCategory();
     await ensureVariableParentValue();
     await ensurePrintSettingsSlots();
+    await ensureBankAccountsTable();
     await ensureSchoolInvoiceSchema();
     await ensureHostInvoiceSchema();
     await ensurePushSubscriptionsTable();

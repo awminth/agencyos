@@ -116,6 +116,15 @@ export interface InvoiceLine {
   amount: number;
 }
 
+export interface InvoiceBankSnapshot {
+  bankAccountId?: string;
+  bankName?: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
+}
+
 export interface Invoice {
   id: string;
   invoiceNo: string;
@@ -129,7 +138,12 @@ export interface Invoice {
   billingPeriod: string;
   lastInvoiceDate: string;
   nextInvoiceDate: string;
+  /** Subtotal excl. tax */
   totalAmount: number;
+  /** Consumption tax amount derived from taxRate */
+  taxAmount?: number;
+  /** totalAmount + taxAmount — amount payments apply against */
+  amountDue?: number;
   amountReceived: number;
   outstandingAmount: number;
   paymentReceivedDate?: string;
@@ -138,6 +152,15 @@ export interface Invoice {
   status: InvoiceStatus;
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
+  billedToAttn?: string;
+  subject?: string;
+  taxRate?: number;
+  bankAccountId?: string;
+  bankName?: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
   createdAt: string;
   lines?: InvoiceLine[];
   workerCount?: number;
@@ -185,7 +208,10 @@ export interface StudentInvoice {
   billingPeriod: string;
   lastInvoiceDate: string;
   nextInvoiceDate: string;
+  /** Subtotal excl. tax */
   totalAmount: number;
+  taxAmount?: number;
+  amountDue?: number;
   amountReceived: number;
   outstandingAmount: number;
   paymentReceivedDate?: string;
@@ -194,6 +220,15 @@ export interface StudentInvoice {
   status: InvoiceStatus;
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
+  billedToAttn?: string;
+  subject?: string;
+  taxRate?: number;
+  bankAccountId?: string;
+  bankName?: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
   createdAt: string;
   lines?: StudentInvoiceLine[];
   studentCount?: number;

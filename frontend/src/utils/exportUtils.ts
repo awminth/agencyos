@@ -295,3 +295,45 @@ export async function copyElementAsImage(
   URL.revokeObjectURL(url);
   return 'downloaded';
 }
+
+/** Download an on-screen document element as a multi-page PDF (digital share). */
+export async function downloadElementAsPdf(
+  elementId: string,
+  filename: string = 'invoice.pdf'
+): Promise<void> {
+  const elem = document.getElementById(elementId);
+  if (!elem) {
+    throw new Error('Document element not found');
+  }
+
+  const { default: html2canvas } = await import('html2canvas-pro');
+  const canvas = await html2canvas(elem, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: false,
+  });
+
+  const imgData = canvas.toDataURL('image/png');
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const imgHeight = (canvas.height * usableWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = margin;
+
+  doc.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+  heightLeft -= pageHeight - margin * 2;
+
+  while (heightLeft > 0) {
+    position = margin - (imgHeight - heightLeft);
+    doc.addPage();
+    doc.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+    heightLeft -= pageHeight - margin * 2;
+  }
+
+  doc.save(`${sanitizeFilename(filename).replace(/\.pdf$/i, '')}.pdf`);
+}

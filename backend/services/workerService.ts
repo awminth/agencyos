@@ -315,10 +315,11 @@ export async function getWorkerRelated(id: string): Promise<{
   if (!worker) throw new AppError('Worker not found', 404);
 
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, invoice_no, status, outstanding_amount
-     FROM invoices
-     WHERE worker_id = :id
-     ORDER BY created_at DESC`,
+    `SELECT DISTINCT i.id, i.invoice_no, i.status, i.outstanding_amount, i.created_at
+     FROM invoices i
+     LEFT JOIN invoice_lines l ON l.invoice_id = i.id
+     WHERE i.worker_id = :id OR l.worker_id = :id
+     ORDER BY i.created_at DESC`,
     { id }
   );
 

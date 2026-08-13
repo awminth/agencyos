@@ -4,6 +4,7 @@ import { Invoice } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import type { MoneyCurrency } from '../utils/currency';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 interface InvoiceDetailSheetProps {
   invoice: Invoice;
@@ -75,7 +76,7 @@ export const InvoiceDetailSheet: React.FC<InvoiceDetailSheetProps> = ({
       value: `${t('invoices.last')}: ${invoice.lastInvoiceDate || '—'} · ${t('invoices.next')}: ${invoice.nextInvoiceDate || '—'}`,
     },
     { label: t('invoices.currency'), value: invoice.currency },
-    { label: t('invoices.total'), value: money(invoice.totalAmount || 0, invoice.currency) },
+    { label: t('invoices.total'), value: money(invoiceAmountDue(invoice), invoice.currency) },
     { label: t('invoices.received'), value: money(invoice.amountReceived || 0, invoice.currency) },
     {
       label: t('invoices.outstanding'),

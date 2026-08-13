@@ -13,7 +13,6 @@ import { useCurrency } from '../context/CurrencyContext';
 import type { MoneyCurrency } from '../utils/currency';
 import { can } from '../utils/permissions';
 import { InvoicePayModal } from './InvoicePayModal';
-import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { PrintableInvoiceModal } from './PrintableInvoiceModal';
 import { PaymentVoucherSheet } from './PaymentVoucherSheet';
 import { MobileMeta } from './MobileMeta';
@@ -24,6 +23,7 @@ import {
   balanceRemainClass,
   balanceTone,
 } from '../utils/invoiceBalanceUi';
+import { invoiceAmountDue } from '../utils/invoiceTax';
 
 function invoiceStatusClass(status: InvoiceStatus) {
   return invoiceStatusBadgeClass(status);
@@ -39,6 +39,11 @@ function invoiceStatusKey(status: InvoiceStatus) {
 
 function outstandingAmountClass(amount: number) {
   return balanceRemainClass(balanceTone(amount, amount > 0 ? amount : 1));
+}
+
+function canRecordPayment(inv: { status?: string; outstandingAmount?: number }): boolean {
+  if (inv.status === 'Paid') return false;
+  return (Number(inv.outstandingAmount) || 0) > 0;
 }
 
 function remainCardClass(remainAmount: number) {
@@ -92,7 +97,7 @@ export function buildWorkerSummaries(
         supervisingOrg: inv.supervisingOrg || '',
         workerCount,
         feeType,
-        totalAmount: inv.totalAmount || 0,
+        totalAmount: invoiceAmountDue(inv),
         totalPaid: inv.amountReceived || 0,
         remainAmount: inv.outstandingAmount || 0,
         invoiceCount: 1,
@@ -101,7 +106,7 @@ export function buildWorkerSummaries(
         workerName: hostCompany,
       });
     } else {
-      existing.totalAmount += inv.totalAmount || 0;
+      existing.totalAmount += invoiceAmountDue(inv);
       existing.totalPaid += inv.amountReceived || 0;
       existing.remainAmount += inv.outstandingAmount || 0;
       existing.invoiceCount += 1;
@@ -161,14 +166,13 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
   const [payments, setPayments] = useState<InvoicePayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
-  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [printableInvoice, setPrintableInvoice] = useState<Invoice | null>(null);
   const [viewPayment, setViewPayment] = useState<InvoicePayment | null>(null);
   const [viewSummaryVoucher, setViewSummaryVoucher] = useState(false);
 
   const paymentBalance = (payment: InvoicePayment) => {
     const inv = workerInvoices.find((i) => i.id === payment.invoiceId);
-    const invoiceTotal = inv?.totalAmount ?? summary.totalAmount;
+    const invoiceTotal = inv ? invoiceAmountDue(inv) : summary.totalAmount;
 
     // Snapshot at this payment: opening balance → this pay → remain
     const siblings = payments
@@ -357,7 +361,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                         label: t('invoices.colDates'),
                         value: `${t('invoices.last')}: ${inv.lastInvoiceDate || '—'} · ${t('invoices.next')}: ${inv.nextInvoiceDate || '—'}`,
                       },
-                      { label: t('invoices.total'), value: money(inv.totalAmount, inv.currency) },
+                      { label: t('invoices.total'), value: money(invoiceAmountDue(inv), inv.currency) },
                       {
                         label: t('invoices.received'),
                         value: (
@@ -395,13 +399,13 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                       <button
                         type="button"
                         className="action-btn"
-                        title={t('common.view')}
-                        onClick={() => setViewInvoice(inv)}
+                        title={t('invoices.formalPreview')}
+                        onClick={() => setPrintableInvoice(inv)}
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {canUpdate && (
+                    {canUpdate && canRecordPayment(inv) && (
                       <button
                         type="button"
                         className="action-btn action-btn-blue"
@@ -481,7 +485,7 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                       </td>
                       <td className="text-right">
                         <div className="cell-stack items-end">
-                          <span className="cell-mono">{money(inv.totalAmount, inv.currency)}</span>
+                          <span className="cell-mono">{money(invoiceAmountDue(inv), inv.currency)}</span>
                           <span
                             className={`cell-mono ${
                               inv.status === 'Paid' ? 'text-blue-700' : 'text-amber-800'
@@ -515,13 +519,13 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
                             <button
                               type="button"
                               className="action-btn"
-                              title={t('common.view')}
-                              onClick={() => setViewInvoice(inv)}
+                              title={t('invoices.formalPreview')}
+                              onClick={() => setPrintableInvoice(inv)}
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {canUpdate && (
+                          {canUpdate && canRecordPayment(inv) && (
                             <button
                               type="button"
                               className="action-btn action-btn-blue"
@@ -701,30 +705,6 @@ export const WorkerFeeDetailPage: React.FC<WorkerFeeDetailPageProps> = ({
           invoice={invoices.find((i) => i.id === payInvoice.id) || payInvoice}
           onClose={() => setPayInvoice(null)}
           onSubmit={handlePay}
-        />
-      )}
-      {viewInvoice && (
-        <InvoiceDetailSheet
-          invoice={invoices.find((i) => i.id === viewInvoice.id) || viewInvoice}
-          canRead={canRead}
-          canUpdate={canUpdate}
-          canDelete={canDelete}
-          onClose={() => setViewInvoice(null)}
-          onPrint={() => {
-            const inv = invoices.find((i) => i.id === viewInvoice.id) || viewInvoice;
-            setViewInvoice(null);
-            setPrintableInvoice(inv);
-          }}
-          onEdit={() => {
-            const inv = invoices.find((i) => i.id === viewInvoice.id) || viewInvoice;
-            setViewInvoice(null);
-            onEditInvoice(inv);
-          }}
-          onDelete={() => {
-            const id = viewInvoice.id;
-            setViewInvoice(null);
-            void onDeleteInvoice(id);
-          }}
         />
       )}
       {printableInvoice && (

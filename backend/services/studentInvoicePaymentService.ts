@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { AppError } from '../middlewares/errorHandler.js';
 import type { InvoiceStatus, StudentInvoicePayment } from '../types/index.js';
 import { newId, num, toDateStr, toIso } from '../utils/helpers.js';
+import { calcAmountDue } from '../utils/invoiceTax.js';
 
 interface StudentPaymentRow extends RowDataPacket {
   id: string;
@@ -73,7 +74,7 @@ function resolveStatus(totalAmount: number, amountReceived: number): InvoiceStat
 export async function recomputeStudentInvoiceTotals(invoiceId: string): Promise<void> {
   await ensureStudentInvoicePaymentsTable();
   const [invRows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, total_amount FROM student_invoices WHERE id = :id LIMIT 1`,
+    `SELECT id, total_amount, COALESCE(tax_rate, 0) AS tax_rate FROM student_invoices WHERE id = :id LIMIT 1`,
     { id: invoiceId }
   );
   if (!invRows[0]) throw new AppError('Invoice not found', 404);
@@ -89,10 +90,10 @@ export async function recomputeStudentInvoiceTotals(invoiceId: string): Promise<
     { id: invoiceId }
   );
 
-  const totalAmount = num(invRows[0].total_amount);
+  const amountDue = calcAmountDue(num(invRows[0].total_amount), num(invRows[0].tax_rate));
   const amountReceived = num(sumRows[0]?.totalReceived);
-  const outstandingAmount = Math.max(0, totalAmount - amountReceived);
-  const status = resolveStatus(totalAmount, amountReceived);
+  const outstandingAmount = Math.max(0, amountDue - amountReceived);
+  const status = resolveStatus(amountDue, amountReceived);
 
   await pool.execute(
     `UPDATE student_invoices SET
@@ -195,13 +196,29 @@ export async function createStudentPayment(
 ): Promise<StudentInvoicePayment> {
   await ensureStudentInvoicePaymentsTable();
   const [invRows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, currency FROM student_invoices WHERE id = :id LIMIT 1`,
+    `SELECT id, currency, total_amount, COALESCE(tax_rate, 0) AS tax_rate,
+            COALESCE(amount_received, 0) AS amount_received
+     FROM student_invoices WHERE id = :id LIMIT 1`,
     { id: invoiceId }
   );
   if (!invRows[0]) throw new AppError('Invoice not found', 404);
 
   const amount = num(body.amount);
   if (amount <= 0) throw new AppError('Payment amount must be greater than 0');
+
+  const amountDue = calcAmountDue(num(invRows[0].total_amount), num(invRows[0].tax_rate));
+  const alreadyReceived = num(invRows[0].amount_received);
+  const outstanding = Math.max(0, amountDue - alreadyReceived);
+  if (outstanding <= 0 && amountDue > 0) {
+    throw new AppError('This invoice is already fully paid');
+  }
+  if (amountDue > 0 && amount > outstanding + 0.009) {
+    throw new AppError(
+      `Amount exceeds outstanding balance (${outstanding.toLocaleString()} ${
+        body.currency || invRows[0].currency || 'JPY'
+      })`
+    );
+  }
 
   const id = newId('spay');
   const paymentDate = body.paymentDate || new Date().toISOString().split('T')[0];

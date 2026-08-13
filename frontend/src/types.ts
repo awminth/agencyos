@@ -128,6 +128,19 @@ export interface InvoiceLine {
   amount: number;
 }
 
+export interface BankAccount {
+  id: string;
+  label: string;
+  bankName: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber: string;
+  accountHolder: string;
+  isDefault: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface Invoice {
   id: string;
   invoiceNo: string;          // Invoice No (e.g. "INV-2026-001")
@@ -140,15 +153,26 @@ export interface Invoice {
   billingPeriod: string;      // e.g. "2026 H1 (Jan - Jun)"
   lastInvoiceDate: string;    // နောက်ဆုံး Invoice ထုတ်သည့်နေ့
   nextInvoiceDate: string;    // နောက်တစ်ကြိမ် Invoice ထုတ်ရမည့်နေ့
-  totalAmount: number;        // စုစုပေါင်း ကျသင့်ငွေ
+  totalAmount: number;        // Subtotal excl. tax
+  taxAmount?: number;
+  amountDue?: number;         // totalAmount + tax — payments apply against this
   amountReceived: number;     // လက်ခံရရှိသော ငွေပမာဏ
-  outstandingAmount: number;  // ကျန်ရှိသေးသော ငွေပမာဏ (Total - Received)
+  outstandingAmount: number;  // ကျန်ရှိသေးသော ငွေပမာဏ (Due - Received)
   paymentReceivedDate?: string; // ငွေဝင်သည့်နေ့
   receiptNo?: string;         // Receipt No
   receiptSentDate?: string;   // Receipt ပို့သည့်နေ့
   status: InvoiceStatus;
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
+  billedToAttn?: string;
+  subject?: string;
+  taxRate?: number;
+  bankAccountId?: string;
+  bankName?: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
   createdAt: string;
   lines?: InvoiceLine[];
   workerCount?: number;
@@ -214,6 +238,8 @@ export interface StudentInvoice {
   lastInvoiceDate: string;
   nextInvoiceDate: string;
   totalAmount: number;
+  taxAmount?: number;
+  amountDue?: number;
   amountReceived: number;
   outstandingAmount: number;
   paymentReceivedDate?: string;
@@ -222,6 +248,15 @@ export interface StudentInvoice {
   status: InvoiceStatus;
   currency: 'JPY' | 'MMK' | 'USD';
   notes?: string;
+  billedToAttn?: string;
+  subject?: string;
+  taxRate?: number;
+  bankAccountId?: string;
+  bankName?: string;
+  branchCode?: string;
+  branchName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
   createdAt: string;
   lines?: StudentInvoiceLine[];
   studentCount?: number;

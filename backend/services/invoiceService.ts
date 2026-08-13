@@ -3,6 +3,8 @@ import { pool } from '../config/db.js';
 import { AppError } from '../middlewares/errorHandler.js';
 import type { Invoice, InvoiceFeeType, InvoiceLine, InvoiceStatus } from '../types/index.js';
 import { newId, num, toDateStr, toIso } from '../utils/helpers.js';
+import { calcAmountDue, calcTaxAmount, normalizeTaxRate } from '../utils/invoiceTax.js';
+import { resolveFormalInvoiceFields } from '../utils/formalInvoiceFields.js';
 import { ensureInvoicePaymentsTable } from './invoicePaymentService.js';
 
 interface InvoiceRow extends RowDataPacket {
@@ -22,6 +24,15 @@ interface InvoiceRow extends RowDataPacket {
   status: InvoiceStatus;
   currency: 'JPY' | 'MMK' | 'USD';
   notes: string | null;
+  billed_to_attn?: string | null;
+  subject?: string | null;
+  tax_rate?: number | string | null;
+  bank_account_id?: string | null;
+  bank_name?: string | null;
+  branch_code?: string | null;
+  branch_name?: string | null;
+  account_number?: string | null;
+  account_holder?: string | null;
   created_at: string;
   invoice_host_company: string | null;
   invoice_supervising_org: string | null;
@@ -129,6 +140,27 @@ export async function ensureHostInvoiceSchema(): Promise<void> {
     // ignore
   }
 
+  const formalCols = [
+    `ALTER TABLE invoices ADD COLUMN billed_to_attn VARCHAR(200) NULL AFTER notes`,
+    `ALTER TABLE invoices ADD COLUMN subject VARCHAR(255) NULL AFTER billed_to_attn`,
+    `ALTER TABLE invoices ADD COLUMN tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00 AFTER subject`,
+    `ALTER TABLE invoices ADD COLUMN bank_account_id VARCHAR(64) NULL AFTER tax_rate`,
+    `ALTER TABLE invoices ADD COLUMN bank_name VARCHAR(150) NULL AFTER bank_account_id`,
+    `ALTER TABLE invoices ADD COLUMN branch_code VARCHAR(50) NULL AFTER bank_name`,
+    `ALTER TABLE invoices ADD COLUMN branch_name VARCHAR(150) NULL AFTER branch_code`,
+    `ALTER TABLE invoices ADD COLUMN account_number VARCHAR(50) NULL AFTER branch_name`,
+    `ALTER TABLE invoices ADD COLUMN account_holder VARCHAR(150) NULL AFTER account_number`,
+  ];
+  for (const sql of formalCols) {
+    try {
+      await pool.query(sql);
+    } catch (err: any) {
+      if (err?.code !== 'ER_DUP_FIELDNAME' && err?.errno !== 1060) {
+        // ignore
+      }
+    }
+  }
+
   schemaEnsured = true;
 }
 
@@ -168,6 +200,10 @@ function mapInvoice(row: InvoiceRow, lines: InvoiceLine[] = []): Invoice {
     row.invoice_host_company || row.legacy_host_company || '';
   const supervisingOrg =
     row.invoice_supervising_org || row.legacy_supervising_org || '';
+  const totalAmount = num(row.total_amount);
+  const taxRate = normalizeTaxRate(row.tax_rate, 0);
+  const taxAmount = calcTaxAmount(totalAmount, taxRate);
+  const amountDue = calcAmountDue(totalAmount, taxRate);
   return {
     id: row.id,
     invoiceNo: row.invoice_no,
@@ -180,7 +216,9 @@ function mapInvoice(row: InvoiceRow, lines: InvoiceLine[] = []): Invoice {
     billingPeriod: row.billing_period,
     lastInvoiceDate: toDateStr(row.last_invoice_date),
     nextInvoiceDate: toDateStr(row.next_invoice_date),
-    totalAmount: num(row.total_amount),
+    totalAmount,
+    taxAmount,
+    amountDue,
     amountReceived: num(row.amount_received),
     outstandingAmount: num(row.outstanding_amount),
     paymentReceivedDate: row.payment_received_date
@@ -191,6 +229,15 @@ function mapInvoice(row: InvoiceRow, lines: InvoiceLine[] = []): Invoice {
     status: row.status,
     currency: row.currency || 'JPY',
     notes: row.notes || '',
+    billedToAttn: row.billed_to_attn || '',
+    subject: row.subject || '',
+    taxRate,
+    bankAccountId: row.bank_account_id || undefined,
+    bankName: row.bank_name || '',
+    branchCode: row.branch_code || '',
+    branchName: row.branch_name || '',
+    accountNumber: row.account_number || '',
+    accountHolder: row.account_holder || '',
     createdAt: toIso(row.created_at),
     lines,
     workerCount: lines.length,
@@ -409,9 +456,17 @@ export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
 
   const totalAmount =
     body.totalAmount !== undefined ? num(body.totalAmount) : computedTotal;
+  const formal = await resolveFormalInvoiceFields({
+    billedToAttn: body.billedToAttn,
+    subject: body.subject,
+    taxRate: body.taxRate,
+    bankAccountId: body.bankAccountId,
+    requireComplete: true,
+  });
+  const amountDue = calcAmountDue(totalAmount, formal.taxRate);
   const amountReceived = 0;
-  const outstandingAmount = Math.max(0, totalAmount - amountReceived);
-  const status = resolveStatus(totalAmount, amountReceived, outstandingAmount, body.status);
+  const outstandingAmount = Math.max(0, amountDue - amountReceived);
+  const status = resolveStatus(amountDue, amountReceived, outstandingAmount, body.status);
 
   const [countRows] = await pool.query<RowDataPacket[]>(
     'SELECT COUNT(*) AS c FROM invoices WHERE invoice_no LIKE :prefix',
@@ -432,11 +487,15 @@ export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
       `INSERT INTO invoices
         (id, invoice_no, worker_id, host_company, supervising_org, fee_type, billing_period,
          last_invoice_date, next_invoice_date, total_amount, amount_received, outstanding_amount,
-         payment_received_date, receipt_no, receipt_sent_date, status, currency, notes)
+         payment_received_date, receipt_no, receipt_sent_date, status, currency, notes,
+         billed_to_attn, subject, tax_rate, bank_account_id, bank_name, branch_code, branch_name,
+         account_number, account_holder)
        VALUES
         (:id, :invoiceNo, NULL, :hostCompany, :supervisingOrg, :feeType, :billingPeriod,
          :lastInvoiceDate, :nextInvoiceDate, :totalAmount, :amountReceived, :outstandingAmount,
-         :paymentReceivedDate, :receiptNo, :receiptSentDate, :status, :currency, :notes)`,
+         :paymentReceivedDate, :receiptNo, :receiptSentDate, :status, :currency, :notes,
+         :billedToAttn, :subject, :taxRate, :bankAccountId, :bankName, :branchCode, :branchName,
+         :accountNumber, :accountHolder)`,
       {
         id,
         invoiceNo,
@@ -455,6 +514,15 @@ export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
         status,
         currency,
         notes: body.notes || '',
+        billedToAttn: formal.billedToAttn,
+        subject: formal.subject,
+        taxRate: formal.taxRate,
+        bankAccountId: formal.bankAccountId || null,
+        bankName: formal.bankName || null,
+        branchCode: formal.branchCode || null,
+        branchName: formal.branchName || null,
+        accountNumber: formal.accountNumber || null,
+        accountHolder: formal.accountHolder || null,
       }
     );
 
@@ -489,6 +557,24 @@ export async function updateInvoice(id: string, body: Partial<Invoice>): Promise
     body.feeType !== undefined ? normalizeFeeType(body.feeType) : existing.feeType;
   const totalAmount =
     body.totalAmount !== undefined ? num(body.totalAmount) : existing.totalAmount;
+  const formal = await resolveFormalInvoiceFields({
+    billedToAttn: body.billedToAttn,
+    subject: body.subject,
+    taxRate: body.taxRate,
+    bankAccountId: body.bankAccountId,
+    requireComplete: true,
+    existing: {
+      billedToAttn: existing.billedToAttn,
+      subject: existing.subject,
+      taxRate: existing.taxRate,
+      bankAccountId: existing.bankAccountId,
+      bankName: existing.bankName,
+      branchCode: existing.branchCode,
+      branchName: existing.branchName,
+      accountNumber: existing.accountNumber,
+      accountHolder: existing.accountHolder,
+    },
+  });
   const { recomputeInvoiceTotals } = await import('./invoicePaymentService.js');
 
   await pool.execute(
@@ -499,7 +585,16 @@ export async function updateInvoice(id: string, body: Partial<Invoice>): Promise
       receipt_sent_date = :receiptSentDate,
       currency = :currency, notes = :notes,
       host_company = :hostCompany,
-      supervising_org = :supervisingOrg
+      supervising_org = :supervisingOrg,
+      billed_to_attn = :billedToAttn,
+      subject = :subject,
+      tax_rate = :taxRate,
+      bank_account_id = :bankAccountId,
+      bank_name = :bankName,
+      branch_code = :branchCode,
+      branch_name = :branchName,
+      account_number = :accountNumber,
+      account_holder = :accountHolder
      WHERE id = :id`,
     {
       id,
@@ -517,6 +612,15 @@ export async function updateInvoice(id: string, body: Partial<Invoice>): Promise
       notes: body.notes ?? existing.notes ?? '',
       hostCompany: existing.hostCompany || body.hostCompany || '',
       supervisingOrg: existing.supervisingOrg || body.supervisingOrg || '',
+      billedToAttn: formal.billedToAttn,
+      subject: formal.subject,
+      taxRate: formal.taxRate,
+      bankAccountId: formal.bankAccountId || null,
+      bankName: formal.bankName || null,
+      branchCode: formal.branchCode || null,
+      branchName: formal.branchName || null,
+      accountNumber: formal.accountNumber || null,
+      accountHolder: formal.accountHolder || null,
     }
   );
 
