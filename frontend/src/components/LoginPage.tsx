@@ -4,7 +4,7 @@ import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageDropdown } from './LanguageDropdown';
-import { BRAND_LOGO_SRC } from '../utils/brand';
+import { BRAND_COVER_MOBILE_SRC, BRAND_COVER_PANEL_SRC, BRAND_LOGO_SRC } from '../utils/brand';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser, rememberMe: boolean) => void;
@@ -179,8 +179,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <div className="absolute top-3 right-3 z-20">{controls}</div>
           <div className="relative z-10 mx-auto flex max-w-sm justify-center pt-8">
             <LoginIllustration
-              src={BRAND_LOGO_SRC}
-              className="h-auto w-full max-w-[280px]"
+              src={BRAND_COVER_MOBILE_SRC}
+              className="h-auto w-full max-w-[240px]"
             />
           </div>
         </div>
@@ -209,8 +209,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         <section className="relative overflow-hidden bg-white dark:bg-slate-950">
           <div className="relative z-10 flex h-full items-center justify-center px-8 py-12">
             <LoginIllustration
-              src={BRAND_LOGO_SRC}
-              className="h-auto w-full max-w-xl"
+              src={BRAND_COVER_PANEL_SRC}
+              className="h-auto w-full max-w-md"
             />
           </div>
         </section>
