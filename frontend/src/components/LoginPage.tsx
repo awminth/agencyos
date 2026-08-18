@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+﻿import React, { useState } from 'react';
+import { Eye, EyeOff, Sun, Moon, Monitor, Lock, Mail } from 'lucide-react';
 import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { LanguageDropdown } from './LanguageDropdown';
-import { BRAND_LOGO_SRC } from '../utils/brand';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser, rememberMe: boolean) => void;
@@ -12,12 +12,22 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const { t } = useLanguage();
+  const { preference, cycleTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const themeIcon =
+    preference === 'dark' ? (
+      <Moon className="h-4 w-4" />
+    ) : preference === 'light' ? (
+      <Sun className="h-4 w-4" />
+    ) : (
+      <Monitor className="h-4 w-4" />
+    );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +74,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const controls = (
     <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={cycleTheme}
+        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-600 shadow-sm backdrop-blur transition hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300"
+        title={t('nav.theme')}
+      >
+        {themeIcon}
+      </button>
       <LanguageDropdown variant="light" />
     </div>
   );
@@ -131,7 +149,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="ΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇó"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-10 text-sm tracking-widest text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-900"
             />
             <button
@@ -173,13 +191,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       className="relative flex h-dvh max-h-dvh flex-col overflow-hidden text-slate-800 antialiased dark:text-slate-100"
       style={{ fontFamily: "'Geomini', 'Noto Sans Myanmar', sans-serif" }}
     >
-      {/* ── Mobile ── */}
+      {/* ΓöÇΓöÇ Mobile ΓöÇΓöÇ */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:hidden">
-        <div className="relative shrink-0 overflow-hidden bg-white px-4 pt-6 pb-4 dark:bg-slate-950">
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-b from-[#EEF2FF] to-white px-4 pt-6 pb-2 dark:from-slate-900 dark:to-slate-950">
           <div className="absolute top-3 right-3 z-20">{controls}</div>
           <div className="relative z-10 mx-auto flex max-w-sm justify-center pt-8">
             <LoginIllustration className="h-auto w-full max-w-[280px]" />
           </div>
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
+            style={{
+              background:
+                'radial-gradient(120% 100% at 50% 100%, #5C6BC0 0%, #3949AB 55%, transparent 56%)',
+            }}
+          />
+          <svg
+            className="absolute inset-x-0 bottom-0 w-full"
+            viewBox="0 0 390 72"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M0 72 V36 C80 8 140 4 195 28 C260 54 320 58 390 24 V72 Z"
+              fill="#5C6BC0"
+            />
+            <path
+              d="M0 72 V44 C90 18 150 12 200 34 C265 58 330 62 390 32 V72 Z"
+              fill="#3949AB"
+            />
+          </svg>
         </div>
 
         <div className="relative z-10 -mt-1 flex flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-100 via-white to-slate-50 px-5 pt-6 pb-10 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
@@ -187,12 +227,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
       </div>
 
-      {/* ── Desktop ── */}
+      {/* ΓöÇΓöÇ Desktop ΓöÇΓöÇ */}
       <div className="hidden min-h-0 flex-1 overflow-hidden lg:grid lg:grid-cols-[minmax(420px,1fr)_minmax(480px,1.15fr)]">
         <section className="relative flex flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(120%_80%_at_0%_0%,#dbeafe_0%,transparent_45%),radial-gradient(80%_60%_at_100%_100%,#e2e8f0_0%,transparent_40%)] from-slate-50 dark:bg-[radial-gradient(120%_80%_at_0%_0%,rgba(37,99,235,0.18)_0%,transparent_45%),linear-gradient(180deg,#020617,#0f172a)]">
           <div className="flex items-center justify-between px-8 pt-6 xl:px-14">
-            <span className="flex items-center gap-2 text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100">
-              <img src={BRAND_LOGO_SRC} alt="" className="h-8 w-8 object-contain" />
+            <span className="text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100">
               AgencyOS
             </span>
             {controls}
@@ -204,6 +243,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </section>
 
         <section className="relative overflow-hidden bg-white dark:bg-slate-950">
+          <div
+            className="absolute inset-y-0 right-0 w-[115%]"
+            style={{
+              background:
+                'linear-gradient(145deg, #7E57C2 0%, #5C6BC0 35%, #3949AB 70%, #283593 100%)',
+              borderTopLeftRadius: '48% 100%',
+              borderBottomLeftRadius: '42% 100%',
+            }}
+          />
           <div className="relative z-10 flex h-full items-center justify-center px-8 py-12">
             <LoginIllustration className="h-auto w-full max-w-lg drop-shadow-xl" />
           </div>
@@ -212,3 +260,4 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     </div>
   );
 };
+
