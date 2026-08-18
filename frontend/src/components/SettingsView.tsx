@@ -7,7 +7,6 @@ import {
   Trash2,
   Save,
   Upload,
-  Image as ImageIcon,
   Users as UsersIcon,
   Coins,
   Landmark,
@@ -24,6 +23,7 @@ import { can } from '../utils/permissions';
 import { confirmDelete, showError, showSuccess } from '../utils/swal';
 import type { DisplayCurrency } from '../utils/currency';
 import { TablePagination, usePagination } from './TablePagination';
+import { BRAND_LOGO_SRC } from '../utils/brand';
 
 type VariableCategory =
   | 'visa_type'
@@ -465,15 +465,11 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                 {t('settings.logo')}
               </label>
               <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
-                {printForm.logoData ? (
-                  <img
-                    src={printForm.logoData}
-                    alt="Agency logo"
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <ImageIcon className="h-10 w-10 text-slate-300" />
-                )}
+                <img
+                  src={printForm.logoData || BRAND_LOGO_SRC}
+                  alt="Agency logo"
+                  className="max-h-full max-w-full object-contain"
+                />
               </div>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                 <Upload className="h-3.5 w-3.5" />

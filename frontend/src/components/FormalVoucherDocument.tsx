@@ -2,6 +2,7 @@ import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import type { PrintLetterhead } from '../utils/printLetterhead';
 import { letterheadContactLine } from '../utils/printLetterhead';
+import { resolveBrandLogo } from '../utils/brand';
 
 export interface FormalVoucherLine {
   description: string;
@@ -124,13 +125,11 @@ export const FormalVoucherDocument: React.FC<FormalVoucherDocumentProps> = ({
           <p className="mt-1 text-sm font-bold text-[#1e3a5f]">
             {issuer.agencyName || '—'}
           </p>
-          {issuer.logoData ? (
-            <img
-              src={issuer.logoData}
-              alt=""
-              className="mt-2 h-10 w-10 object-contain sm:ml-auto"
-            />
-          ) : null}
+          <img
+            src={resolveBrandLogo(issuer.logoData)}
+            alt=""
+            className="mt-2 h-16 w-auto max-w-[140px] object-contain sm:ml-auto"
+          />
           {letterheadContactLine(issuer) ? (
             <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap text-slate-600">
               {letterheadContactLine(issuer)}

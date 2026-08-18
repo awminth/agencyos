@@ -6,6 +6,7 @@ import type { MoneyCurrency } from '../utils/currency';
 import { calcAmountDue, calcTaxAmount, normalizeTaxRate } from '../utils/invoiceTax';
 import type { PrintLetterhead } from '../utils/printLetterhead';
 import { letterheadContactLine } from '../utils/printLetterhead';
+import { resolveBrandLogo } from '../utils/brand';
 
 export type IssuerSettings = PrintLetterhead;
 
@@ -107,13 +108,11 @@ export const FormalInvoiceDocument: React.FC<FormalInvoiceDocumentProps> = ({
           <p className="mt-1 text-sm font-bold text-[#1e3a5f]">
             {issuer.agencyName || '—'}
           </p>
-          {issuer.logoData ? (
-            <img
-              src={issuer.logoData}
-              alt=""
-              className="mt-2 h-10 w-10 object-contain sm:ml-auto"
-            />
-          ) : null}
+          <img
+            src={resolveBrandLogo(issuer.logoData)}
+            alt=""
+            className="mt-2 h-16 w-auto max-w-[140px] object-contain sm:ml-auto"
+          />
           {letterheadContactLine(issuer) ? (
             <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap text-slate-600">
               {letterheadContactLine(issuer)}

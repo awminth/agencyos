@@ -6,6 +6,7 @@ import {
   type HelpChatQuota,
   type HelpChatTurn,
 } from '../utils/api';
+import { BRAND_LOGO_SRC } from '../utils/brand';
 
 interface HelpChatProps {
   userId: string;
@@ -94,15 +95,22 @@ export const HelpChat: React.FC<HelpChatProps> = ({ userId }) => {
       {open && (
         <div className="fixed bottom-36 right-4 z-40 flex w-[min(100vw-2rem,22rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 md:bottom-24 md:right-6">
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/80">
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                အကူအညီ (မြန်မာ)
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {quota
-                  ? `ယနေ့ ကျန် ${quota.remaining} / ${quota.limit}`
-                  : 'AgencyMS အသုံးပြုနည်းသာ'}
-              </p>
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img
+                src={BRAND_LOGO_SRC}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-lg bg-white object-contain"
+              />
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  အကူအညီ (မြန်မာ)
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {quota
+                    ? `ယနေ့ ကျန် ${quota.remaining} / ${quota.limit}`
+                    : 'AgencyMS အသုံးပြုနည်းသာ'}
+                </p>
+              </div>
             </div>
             <button
               type="button"

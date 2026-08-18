@@ -4,6 +4,7 @@ import { Bell, LogOut, Banknote } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { LanguageDropdown } from './LanguageDropdown';
+import { BRAND_LOGO_SRC } from '../utils/brand';
 
 interface NavbarProps {
   alertCount: number;
@@ -29,10 +30,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-30 shrink-0 border-b border-slate-800 bg-slate-900 text-white shadow-sm">
       <div className="flex h-16 w-full items-center justify-between gap-2 px-3 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center space-x-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
               <img
-                src="/brand/marctober-logo.png"
-                alt=""
+                src={BRAND_LOGO_SRC}
+                alt="Marctober Tech"
                 className="h-full w-full object-contain p-0.5"
               />
             </div>

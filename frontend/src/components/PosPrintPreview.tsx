@@ -3,6 +3,7 @@ import { Copy, Printer, X, type LucideIcon } from 'lucide-react';
 import { copyElementAsImage, printElement } from '../utils/exportUtils';
 import { showError, showSuccess } from '../utils/swal';
 import { useLanguage } from '../context/LanguageContext';
+import { resolveBrandLogo } from '../utils/brand';
 
 export interface PosField {
   label: string;
@@ -163,13 +164,11 @@ export const PosReceipt: React.FC<PosReceiptProps> = ({
     className="print-target pos-receipt w-full bg-white px-3 py-4 font-mono text-[11px] leading-snug text-slate-900"
   >
     <div className="border-b border-dashed border-slate-400 pb-2 text-center">
-      {logoData ? (
-        <img
-          src={logoData}
-          alt=""
-          className="mx-auto mb-1 h-10 w-10 object-contain"
-        />
-      ) : null}
+      <img
+        src={resolveBrandLogo(logoData)}
+        alt=""
+        className="mx-auto mb-1 h-14 w-auto max-w-[120px] object-contain"
+      />
       <p className="font-sans text-sm font-bold tracking-wide uppercase">{agencyName}</p>
       {contactLine ? (
         <p className="mt-0.5 break-words font-sans text-[9px] text-slate-600">{contactLine}</p>
