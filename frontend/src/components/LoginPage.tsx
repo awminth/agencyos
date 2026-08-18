@@ -4,7 +4,7 @@ import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageDropdown } from './LanguageDropdown';
-import { BRAND_COVER_MOBILE_SRC, BRAND_COVER_PANEL_SRC, BRAND_LOGO_SRC } from '../utils/brand';
+import { BRAND_LOGO_SRC } from '../utils/brand';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser, rememberMe: boolean) => void;
@@ -178,10 +178,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         <div className="relative shrink-0 overflow-hidden bg-white px-4 pt-6 pb-4 dark:bg-slate-950">
           <div className="absolute top-3 right-3 z-20">{controls}</div>
           <div className="relative z-10 mx-auto flex max-w-sm justify-center pt-8">
-            <LoginIllustration
-              src={BRAND_COVER_MOBILE_SRC}
-              className="h-auto w-full max-w-[240px]"
-            />
+            <LoginIllustration className="h-auto w-full max-w-[280px]" />
           </div>
         </div>
 
@@ -208,10 +205,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
         <section className="relative overflow-hidden bg-white dark:bg-slate-950">
           <div className="relative z-10 flex h-full items-center justify-center px-8 py-12">
-            <LoginIllustration
-              src={BRAND_COVER_PANEL_SRC}
-              className="h-auto w-full max-w-md"
-            />
+            <LoginIllustration className="h-auto w-full max-w-lg drop-shadow-xl" />
           </div>
         </section>
       </div>
