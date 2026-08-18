@@ -149,7 +149,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder=""""
+              placeholder=""
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-10 text-sm tracking-widest text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-900"
             />
             <button
@@ -191,7 +191,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       className="relative flex h-dvh max-h-dvh flex-col overflow-hidden text-slate-800 antialiased dark:text-slate-100"
       style={{ fontFamily: "'Geomini', 'Noto Sans Myanmar', sans-serif" }}
     >
-      {/* ΓöÇΓöÇ Mobile ΓöÇΓöÇ */}
+      {/* ÎÃ¶ÃÎÃ¶Ã Mobile ÎÃ¶ÃÎÃ¶Ã */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:hidden">
         <div className="relative shrink-0 overflow-hidden bg-gradient-to-b from-[#EEF2FF] to-white px-4 pt-6 pb-2 dark:from-slate-900 dark:to-slate-950">
           <div className="absolute top-3 right-3 z-20">{controls}</div>
@@ -227,7 +227,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
       </div>
 
-      {/* ΓöÇΓöÇ Desktop ΓöÇΓöÇ */}
+      {/* ÎÃ¶ÃÎÃ¶Ã Desktop ÎÃ¶ÃÎÃ¶Ã */}
       <div className="hidden min-h-0 flex-1 overflow-hidden lg:grid lg:grid-cols-[minmax(420px,1fr)_minmax(480px,1.15fr)]">
         <section className="relative flex flex-col overflow-y-auto overscroll-contain bg-[radial-gradient(120%_80%_at_0%_0%,#dbeafe_0%,transparent_45%),radial-gradient(80%_60%_at_100%_100%,#e2e8f0_0%,transparent_40%)] from-slate-50 dark:bg-[radial-gradient(120%_80%_at_0%_0%,rgba(37,99,235,0.18)_0%,transparent_45%),linear-gradient(180deg,#020617,#0f172a)]">
           <div className="flex items-center justify-between px-8 pt-6 xl:px-14">
