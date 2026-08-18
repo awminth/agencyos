@@ -1,0 +1,49 @@
+# Ping the Free Render web service during Myanmar business hours so it
+# does not spin down after 15 minutes of idle. Spun-down services do not
+# consume Free instance hours; keeping 08:00–20:00 Asia/Yangon awake uses
+# ~372 hours/month of the 750-hour workspace allowance (safe for one service).
+name: Keep Render awake
+
+on:
+  schedule:
+    # 07:50 Asia/Yangon = 01:20 UTC (warm up before 08:00)
+    - cron: '20 1 * * *'
+    # 08:00–08:20 Asia/Yangon = 01:30–01:50 UTC
+    - cron: '30,40,50 1 * * *'
+    # 08:30–18:50 Asia/Yangon = 02:00–12:50 UTC
+    - cron: '*/10 2-12 * * *'
+    # 19:00–20:00 Asia/Yangon = 13:00–13:30 UTC
+    - cron: '0,10,20,30 13 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping health endpoint
+        env:
+          KEEP_ALIVE_URL: https://agencyos-3jgm.onrender.com/api/system/health
+        run: |
+          set -euo pipefail
+          hour=$(TZ=Asia/Yangon date +%-H)
+          minute=$(TZ=Asia/Yangon date +%-M)
+          echo "Yangon time: $(TZ=Asia/Yangon date -Iseconds)"
+
+          should_ping=0
+          if [ "$hour" -eq 7 ] && [ "$minute" -ge 50 ]; then
+            should_ping=1
+          elif [ "$hour" -ge 8 ] && [ "$hour" -lt 20 ]; then
+            should_ping=1
+          elif [ "$hour" -eq 20 ] && [ "$minute" -eq 0 ]; then
+            should_ping=1
+          fi
+
+          if [ "$should_ping" -ne 1 ]; then
+            echo "Outside 07:50–20:00 Asia/Yangon — skip"
+            exit 0
+          fi
+
+          curl -fsS --retry 4 --retry-all-errors --retry-delay 15 --max-time 90 "$KEEP_ALIVE_URL"
+          echo
+          echo OK
