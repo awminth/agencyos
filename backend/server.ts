@@ -6,7 +6,10 @@ import { createApp } from './app.js';
 import { pingDb } from './config/db.js';
 import { env, isWebPushConfigured } from './config/env.js';
 import { ensurePermissionsColumn } from './services/usersService.js';
-import { ensureFinancialConfigCurrency } from './services/workerService.js';
+import {
+  ensureDeploymentsOptionalDates,
+  ensureFinancialConfigCurrency,
+} from './services/workerService.js';
 import { ensureSchoolNameCategory, ensureVariableParentValue, ensurePrintSettingsSlots, ensureBankAccountsTable } from './services/settingsService.js';
 import { ensureSchoolInvoiceSchema } from './services/studentInvoiceService.js';
 import { ensureHostInvoiceSchema } from './services/invoiceService.js';
@@ -25,6 +28,7 @@ async function start() {
     console.log(`MySQL connected: ${env.dbName}@${env.dbHost}:${env.dbPort}`);
     await ensurePermissionsColumn();
     await ensureFinancialConfigCurrency();
+    await ensureDeploymentsOptionalDates();
     await ensureSchoolNameCategory();
     await ensureVariableParentValue();
     await ensurePrintSettingsSlots();

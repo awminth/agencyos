@@ -11,6 +11,7 @@ import {
   Eye,
   FileSpreadsheet,
   Upload,
+  Loader2,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { TablePagination, usePagination } from './TablePagination';
@@ -259,26 +260,28 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
       await showSuccess(t('workers.importSuccess', { count: result.imported }));
     } catch (err) {
       console.error(err);
+      const message =
+        err instanceof Error ? err.message : 'Import မအောင်မြင်ပါ';
       const warnings = err instanceof ApiError ? err.warnings : undefined;
-      if (warnings?.length) {
-        const list = warnings
-          .slice(0, 40)
-          .map((w) => `<li class="text-left text-sm">${escapeHtml(w)}</li>`)
-          .join('');
-        const more =
-          warnings.length > 40
-            ? `<p class="mt-2 text-xs text-slate-500">… +${warnings.length - 40} more</p>`
-            : '';
-        await showWarning(t('workers.importFailTitle'), undefined, {
-          html: `<p class="agency-swal__msg mb-2">${escapeHtml(t('workers.importFailHint'))}</p>
-            <ul class="max-h-64 list-disc space-y-1 overflow-y-auto pl-5 text-left">${list}</ul>${more}`,
-        });
-      } else {
-        await showWarning(
-          t('workers.importFailTitle'),
-          err instanceof Error ? err.message : 'Import မအောင်မြင်ပါ'
-        );
-      }
+      const detailLines =
+        warnings?.length
+          ? warnings
+          : message
+            ? [message]
+            : ['Import မအောင်မြင်ပါ'];
+      const list = detailLines
+        .slice(0, 40)
+        .map((w) => `<li class="text-left text-sm leading-relaxed">${escapeHtml(w)}</li>`)
+        .join('');
+      const more =
+        detailLines.length > 40
+          ? `<p class="mt-2 text-xs text-slate-500">… +${detailLines.length - 40} more</p>`
+          : '';
+      await showWarning(t('workers.importFailTitle'), undefined, {
+        html: `<p class="agency-swal__msg mb-2">${escapeHtml(t('workers.importFailHint'))}</p>
+          <p class="mb-2 text-left text-xs font-semibold text-slate-600">${escapeHtml(t('workers.importFailDetails'))}</p>
+          <ul class="max-h-64 list-disc space-y-1 overflow-y-auto pl-5 text-left">${list}</ul>${more}`,
+      });
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = '';
@@ -354,6 +357,21 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
 
   return (
     <div className="space-y-5">
+      {importing && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-[1px]"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-xl">
+            <Loader2 className="h-10 w-10 animate-spin text-amber-600" />
+            <p className="text-sm font-bold text-slate-900">{t('workers.importing')}</p>
+            <p className="text-center text-xs text-slate-500">{t('workers.importingHint')}</p>
+          </div>
+        </div>
+      )}
+
       <div className="bento-card space-y-4 p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -381,10 +399,14 @@ export const WorkerManagement: React.FC<WorkerManagementProps> = ({
                   type="button"
                   disabled={importing}
                   onClick={() => importInputRef.current?.click()}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-xs transition-all hover:bg-amber-100 disabled:opacity-60 sm:text-sm"
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-xs transition-all hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60 sm:text-sm"
                   title={t('workers.import')}
                 >
-                  <Upload className="h-4 w-4" />
+                  {importing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
                   <span className="hidden sm:inline">
                     {importing ? t('workers.importing') : t('workers.import')}
                   </span>

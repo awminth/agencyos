@@ -77,7 +77,7 @@ function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
 
-/** Normalize Excel date / string to YYYY-MM-DD */
+/** Normalize Excel date / string to YYYY-MM-DD (DB format). */
 export function toExcelDateStr(value: unknown): string {
   if (value === null || value === undefined || value === '') return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -90,16 +90,29 @@ export function toExcelDateStr(value: unknown): string {
       return `${parsed.y}-${pad2(parsed.m)}-${pad2(parsed.d)}`;
     }
   }
-  const s = String(value).trim();
+  const s = String(value).replace(/\s+/g, ' ').trim();
   if (!s) return '';
-  // Already ISO-like
-  const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+
+  // YYYY-MM-DD / YYYY/MM/DD
+  let m = s.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})$/);
   if (m) return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
+
+  // DD.MM.YYYY / DD/MM/YYYY / DD-MM-YYYY (common in Excel exports)
+  m = s.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$/);
+  if (m) {
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${pad2(month)}-${pad2(day)}`;
+    }
+  }
+
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
-  return s;
+  return '';
 }
 
 function cellStr(value: unknown): string {
@@ -202,10 +215,12 @@ export function downloadWorkerImportTemplate(
   const refAoa: string[][] = [
     ['Workers Excel Import — Settings Reference'],
     ['Orange headers = required. Values must match Settings → System Variables exactly.'],
-    ['Gender: Male | Female'],
-    ['Status: Active | Contract Ended | Absconded'],
-    ['Currency: JPY | MMK | USD'],
-    ['Dates: YYYY-MM-DD (e.g. 2024-05-01)'],
+    ['Only Visa Type / Supervising Org / Host Company / Job Category must match Settings exactly.'],
+    ['Other columns import as-is (invalid Gender/Status/Currency fall back to defaults).'],
+    ['Gender: Male | Female (default Male)'],
+    ['Status: Active | Contract Ended | Absconded (default Active)'],
+    ['Currency: JPY | MMK | USD (default JPY)'],
+    ['Dates: YYYY-MM-DD or DD.MM.YYYY (e.g. 2024-05-01 or 01.05.2024) → stored as YYYY-MM-DD'],
     [],
     ['Visa Type', 'Supervising Org', 'Host Company', 'Job Category'],
   ];

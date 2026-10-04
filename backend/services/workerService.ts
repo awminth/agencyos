@@ -1,9 +1,9 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../config/db.js';
-import { AppError } from '../middlewares/errorHandler.js';
+import { AppError, friendlyMysqlMessage } from '../middlewares/errorHandler.js';
 import { listVariables } from './settingsService.js';
 import type { Worker, WorkerStatus } from '../types/index.js';
-import { newId, num, toDateStr, toIso } from '../utils/helpers.js';
+import { newId, num, parseImportDate, toDateStr, toIso } from '../utils/helpers.js';
 
 interface WorkerRow extends RowDataPacket {
   id: string;
@@ -405,7 +405,8 @@ function resolveSetting(value: string, allowed: Set<string>): string {
 
 /**
  * Bulk-create workers in one transaction.
- * Validates Visa / Supervising Org / Host Company / Job Category against active Settings.
+ * Hard-validates only Settings system variables (Visa / Org / Host / Job).
+ * Other fields import as-is with format coercion (dates → YYYY-MM-DD, soft defaults).
  * On any validation or DB error: no rows inserted (rollback) and warnings returned.
  */
 export async function importWorkers(
@@ -432,6 +433,7 @@ export async function importWorkers(
   const warnings: string[] = [];
   const seenSerial = new Map<string, number>();
   const seenPassport = new Map<string, number>();
+  const validStatuses: WorkerStatus[] = ['Active', 'Contract Ended', 'Absconded'];
 
   const normalized: Array<{
     rowNum: number;
@@ -444,29 +446,20 @@ export async function importWorkers(
     const name = normStr(raw.name);
     const passportNo = normStr(raw.passportNo);
     const genderRaw = normStr(raw.gender);
-    const statusRaw = normStr(raw.status) || 'Active';
+    const statusRaw = normStr(raw.status);
     const dep = raw.deployment || ({} as Worker['deployment']);
     const visaType = normStr(dep.visaType);
     const supervisingOrg = normStr(dep.supervisingOrg);
     const hostCompany = normStr(dep.hostCompany);
     const jobCategory = normStr(dep.jobCategory);
     const serialNo = normStr(raw.serialNo);
-    const currencyRaw = normStr(raw.financialConfig?.currency) || 'JPY';
+    const currencyRaw = normStr(raw.financialConfig?.currency).toUpperCase();
 
+    // Required identity fields
     if (!name) warnings.push(`Row ${rowNum}: အမည် (Name) မရှိပါ`);
     if (!passportNo) warnings.push(`Row ${rowNum}: Passport နံပါတ် မရှိပါ`);
 
-    if (genderRaw && genderRaw !== 'Male' && genderRaw !== 'Female') {
-      warnings.push(`Row ${rowNum}: Gender သည် Male သို့မဟုတ် Female ဖြစ်ရမည် ("${genderRaw}")`);
-    }
-
-    const validStatuses: WorkerStatus[] = ['Active', 'Contract Ended', 'Absconded'];
-    if (!validStatuses.includes(statusRaw as WorkerStatus)) {
-      warnings.push(
-        `Row ${rowNum}: Status မှားနေပါသည် ("${statusRaw}") — Active / Contract Ended / Absconded`
-      );
-    }
-
+    // Settings system variables only — hard fail if missing / not in Settings
     if (!visaType) {
       warnings.push(`Row ${rowNum}: Visa Type မရှိပါ`);
     } else if (!matchSetting(visaType, visaSet)) {
@@ -499,9 +492,18 @@ export async function importWorkers(
       );
     }
 
-    if (currencyRaw !== 'JPY' && currencyRaw !== 'MMK' && currencyRaw !== 'USD') {
-      warnings.push(`Row ${rowNum}: Currency မှားနေပါသည် ("${currencyRaw}") — JPY / MMK / USD`);
-    }
+    // Soft-coerce remaining fields (do not block import)
+    const genderLower = genderRaw.toLowerCase();
+    const gender: 'Male' | 'Female' =
+      genderLower === 'female' || genderLower === 'f' || genderLower === 'မ' ? 'Female' : 'Male';
+
+    const statusMatch = validStatuses.find((s) => s.toLowerCase() === statusRaw.toLowerCase());
+    const status: WorkerStatus = statusMatch || 'Active';
+
+    const currency =
+      currencyRaw === 'MMK' || currencyRaw === 'USD' || currencyRaw === 'JPY'
+        ? currencyRaw
+        : 'JPY';
 
     if (serialNo) {
       const key = serialNo.toLowerCase();
@@ -525,38 +527,37 @@ export async function importWorkers(
       }
     }
 
+    const abscondedParsed = parseImportDate(raw.abscondedDate);
     normalized.push({
       rowNum,
       body: {
         serialNo: serialNo || undefined,
         name,
-        gender: genderRaw === 'Female' ? 'Female' : 'Male',
-        dob: normStr(raw.dob) || '2000-01-01',
+        gender,
+        dob: parseImportDate(raw.dob, '2000-01-01'),
         passportNo,
-        status: (validStatuses.includes(statusRaw as WorkerStatus)
-          ? statusRaw
-          : 'Active') as WorkerStatus,
-        abscondedDate: normStr(raw.abscondedDate) || undefined,
+        status,
+        abscondedDate:
+          status === 'Absconded'
+            ? abscondedParsed || new Date().toISOString().split('T')[0]
+            : abscondedParsed || undefined,
         notes: normStr(raw.notes),
         deployment: {
           visaType: resolveSetting(visaType, visaSet),
           supervisingOrg: resolveSetting(supervisingOrg, orgSet),
           hostCompany: resolveSetting(hostCompany, hostSet),
           jobCategory: resolveSetting(jobCategory, jobSet),
-          ownCardDate: normStr(dep.ownCardDate),
-          departureDate: normStr(dep.departureDate),
-          japanEntryDate: normStr(dep.japanEntryDate),
-          contractEndDate: normStr(dep.contractEndDate),
+          ownCardDate: parseImportDate(dep.ownCardDate),
+          departureDate: parseImportDate(dep.departureDate),
+          japanEntryDate: parseImportDate(dep.japanEntryDate),
+          contractEndDate: parseImportDate(dep.contractEndDate),
         },
         financialConfig: {
           flightFee: num(raw.financialConfig?.flightFee, 150000),
           trainingFee: num(raw.financialConfig?.trainingFee, 250000),
           managementFee: num(raw.financialConfig?.managementFee, 30000),
           billingCycleMonths: num(raw.financialConfig?.billingCycleMonths, 6),
-          currency: (currencyRaw === 'MMK' || currencyRaw === 'USD' ? currencyRaw : 'JPY') as
-            | 'JPY'
-            | 'MMK'
-            | 'USD',
+          currency: currency as 'JPY' | 'MMK' | 'USD',
         },
       },
     });
@@ -608,15 +609,18 @@ export async function importWorkers(
 
   if (warnings.length) {
     throw new AppError(
-      'Excel Import မအောင်မြင်ပါ — Settings နှင့် မကိုက်ညီသော (သို့) မပြည့်စုံသော အချက်အလက်များ ရှိနေသောကြောင့် data insert မလုပ်ဘဲ rollback လုပ်ထားပါသည်။',
+      'Excel Import မအောင်မြင်ပါ — Visa / Supervising Org / Host Company / Job Category သည် Settings → System Variables နှင့် မကိုက်ညီသောကြောင့် (သို့) Name/Passport မပြည့်စုံသောကြောင့် data insert မလုပ်ဘဲ rollback လုပ်ထားပါသည်။',
       400,
       warnings
     );
   }
 
+  await ensureDeploymentsOptionalDates();
+
   const year = new Date().getFullYear();
   const conn = await pool.getConnection();
   const createdIds: string[] = [];
+  let currentRowNum = 0;
 
   try {
     await conn.beginTransaction();
@@ -628,6 +632,7 @@ export async function importWorkers(
     let nextSeq = Number(countRows[0].c) + 1;
 
     for (const n of normalized) {
+      currentRowNum = n.rowNum;
       const id = newId('w');
       const depId = newId('dep');
       const finId = newId('fin');
@@ -702,7 +707,16 @@ export async function importWorkers(
     await conn.commit();
   } catch (err) {
     await conn.rollback();
-    throw err;
+    if (err instanceof AppError) throw err;
+    const friendly =
+      friendlyMysqlMessage(err as { code?: string; errno?: number; sqlMessage?: string; message?: string }) ||
+      'Excel Import မအောင်မြင်ပါ။ အချက်အလက်များကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။';
+    const rowHint = currentRowNum > 0 ? `Row ${currentRowNum}: ${friendly}` : friendly;
+    throw new AppError(
+      'Excel Import မအောင်မြင်ပါ — အောက်ပါအချက်ကို ပြင်ပြီး ပြန် Import လုပ်ပါ။',
+      400,
+      [rowHint]
+    );
   } finally {
     conn.release();
   }
@@ -727,6 +741,29 @@ export async function ensureFinancialConfigCurrency(): Promise<void> {
   } catch (err: any) {
     if (err?.code !== 'ER_DUP_FIELDNAME' && err?.errno !== 1060) {
       // ignore if table missing during first boot
+    }
+  }
+}
+
+/** Allow empty deployment dates on Excel import (older DBs had NOT NULL). */
+export async function ensureDeploymentsOptionalDates(): Promise<void> {
+  for (const col of [
+    'own_card_date',
+    'departure_date',
+    'japan_entry_date',
+    'contract_end_date',
+  ]) {
+    try {
+      await pool.execute(`ALTER TABLE deployments MODIFY COLUMN ${col} DATE NULL`);
+    } catch (err: any) {
+      if (
+        err?.code !== 'ER_NO_SUCH_TABLE' &&
+        err?.code !== 'ER_BAD_FIELD_ERROR' &&
+        err?.errno !== 1146 &&
+        err?.errno !== 1054
+      ) {
+        console.warn(`ensureDeploymentsOptionalDates(${col}) skipped:`, err?.code || err?.message);
+      }
     }
   }
 }
