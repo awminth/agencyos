@@ -125,6 +125,9 @@ export function can(
   return Boolean(permissions[module]?.[action]);
 }
 
-export function authHeaders(userId?: string): HeadersInit {
-  return userId ? { 'X-User-Id': userId, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+export function authHeaders(userId?: string, sessionToken?: string): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (userId) headers['X-User-Id'] = userId;
+  if (sessionToken) headers['X-Session-Token'] = sessionToken;
+  return headers;
 }

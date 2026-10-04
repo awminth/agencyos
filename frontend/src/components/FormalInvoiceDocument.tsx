@@ -7,6 +7,7 @@ import { calcAmountDue, calcTaxAmount, normalizeTaxRate } from '../utils/invoice
 import type { PrintLetterhead } from '../utils/printLetterhead';
 import { letterheadContactLine } from '../utils/printLetterhead';
 import { resolveBrandLogo } from '../utils/brand';
+import { AgencyStamp, stampVariantForSlot } from './AgencyStamp';
 
 export type IssuerSettings = PrintLetterhead;
 
@@ -14,6 +15,8 @@ interface FormalInvoiceDocumentProps {
   id: string;
   invoice: Invoice;
   issuer: IssuerSettings;
+  /** Print letterhead slot — controls company stamp name (1 = J Stars, 2 = May Stars). */
+  voucherSlot?: 1 | 2;
 }
 
 function formatIssueDate(iso: string): string {
@@ -38,6 +41,7 @@ export const FormalInvoiceDocument: React.FC<FormalInvoiceDocumentProps> = ({
   id,
   invoice,
   issuer,
+  voucherSlot = 1,
 }) => {
   const { t } = useLanguage();
   const { formatMoney } = useCurrency();
@@ -54,6 +58,7 @@ export const FormalInvoiceDocument: React.FC<FormalInvoiceDocumentProps> = ({
   const amountDue = invoice.amountDue ?? calcAmountDue(subtotal, taxRate);
   const lines = invoice.lines || [];
   const serviceLabel = feeDescription(invoice.feeType, t);
+  const stampVariant = stampVariantForSlot(voucherSlot);
 
   return (
     <div
@@ -61,21 +66,30 @@ export const FormalInvoiceDocument: React.FC<FormalInvoiceDocumentProps> = ({
       className="w-full bg-white px-6 py-7 text-slate-900 shadow-sm sm:px-8"
       style={{ fontFamily: '"Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
     >
-      <div className="flex items-start justify-between gap-4 border-b-2 border-[#1e3a5f] pb-4">
-        <div>
+      {/* Header: title | stamp | Invoice No / Date (to the right of stamp) — both voucher slots */}
+      <div className="flex items-start justify-between gap-3 border-b-2 border-[#1e3a5f] pb-4">
+        <div className="min-w-0 shrink">
           <h1 className="text-3xl font-bold tracking-[0.08em] text-[#1e3a5f]">INVOICE</h1>
         </div>
-        <div className="text-right text-xs leading-relaxed text-slate-600">
-          <p>
-            <span className="font-semibold text-slate-500">{t('invoices.invoiceNo')}:</span>{' '}
-            <span className="font-mono font-bold text-slate-900">{invoice.invoiceNo}</span>
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-slate-500">{t('invoices.invoiceDate')}:</span>{' '}
-            <span className="font-medium text-slate-900">
-              {formatIssueDate(invoice.lastInvoiceDate)}
-            </span>
-          </p>
+        <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
+          <AgencyStamp
+            variant={stampVariant}
+            imageSrc={issuer.stampData}
+            size={100}
+            className="opacity-95"
+          />
+          <div className="min-w-[8.5rem] text-left text-xs leading-relaxed text-slate-600 sm:min-w-[10rem]">
+            <p>
+              <span className="font-semibold text-slate-500">{t('invoices.invoiceNo')}:</span>{' '}
+              <span className="font-mono font-bold text-slate-900">{invoice.invoiceNo}</span>
+            </p>
+            <p className="mt-1">
+              <span className="font-semibold text-slate-500">{t('invoices.invoiceDate')}:</span>{' '}
+              <span className="font-medium text-slate-900">
+                {formatIssueDate(invoice.lastInvoiceDate)}
+              </span>
+            </p>
+          </div>
         </div>
       </div>
 

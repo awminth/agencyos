@@ -41,6 +41,7 @@ interface PrintSettings {
   registrationNo: string;
   fax: string;
   logoData: string | null;
+  stampData: string | null;
 }
 
 interface SystemVariable {
@@ -84,6 +85,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     registrationNo: '',
     fax: '',
     logoData: null,
+    stampData: null,
   });
   const [printForm2, setPrintForm2] = useState<PrintSettings>({
     agencyName: '',
@@ -92,6 +94,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     registrationNo: '',
     fax: '',
     logoData: null,
+    stampData: null,
   });
   const [printSaving, setPrintSaving] = useState(false);
   const [printMsg, setPrintMsg] = useState('');
@@ -134,6 +137,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           registrationNo: pRes.voucher1?.registrationNo || '',
           fax: pRes.voucher1?.fax || '',
           logoData: pRes.voucher1?.logoData || null,
+          stampData: pRes.voucher1?.stampData || null,
         });
         setPrintForm2({
           agencyName: pRes.voucher2?.agencyName || '',
@@ -142,6 +146,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           registrationNo: pRes.voucher2?.registrationNo || '',
           fax: pRes.voucher2?.fax || '',
           logoData: pRes.voucher2?.logoData || null,
+          stampData: pRes.voucher2?.stampData || null,
         });
       } else {
         const flat = {
@@ -151,6 +156,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           registrationNo: pRes.registrationNo || '',
           fax: pRes.fax || '',
           logoData: pRes.logoData || null,
+          stampData: pRes.stampData || null,
         };
         setPrintForm1(flat);
         setPrintForm2({ ...flat });
@@ -172,18 +178,24 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     setDisplayInput(displayCurrency);
   }, [jpyToMmkRate, displayCurrency]);
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const readImageFile = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'logoData' | 'stampData'
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      setPrintMsg(t('settings.logoTooBig'));
+      setPrintMsg(
+        field === 'stampData' ? t('settings.stampTooBig') : t('settings.logoTooBig')
+      );
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setPrintForm((prev) => ({ ...prev, logoData: String(reader.result) }));
+      setPrintForm((prev) => ({ ...prev, [field]: String(reader.result) }));
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const savePrint = async () => {
@@ -205,6 +217,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           registrationNo: data.voucher1?.registrationNo || '',
           fax: data.voucher1?.fax || '',
           logoData: data.voucher1?.logoData || null,
+          stampData: data.voucher1?.stampData || null,
         });
         setPrintForm2({
           agencyName: data.voucher2?.agencyName || '',
@@ -213,6 +226,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
           registrationNo: data.voucher2?.registrationNo || '',
           fax: data.voucher2?.fax || '',
           logoData: data.voucher2?.logoData || null,
+          stampData: data.voucher2?.stampData || null,
         });
       }
       setPrintMsg(t('settings.printSaved'));
@@ -385,6 +399,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     ['Print Settings', 'Address', printForm.address],
     ['Print Settings', 'Phone', printForm.phone],
     ['Print Settings', 'Logo', printForm.logoData ? 'Yes' : 'No'],
+    ['Print Settings', 'Stamp', printForm.stampData ? 'Yes' : 'No'],
     ['Currency', '1 JPY = MMK', rateInput],
     ['Currency', 'Display', displayInput],
     ...variables.map((v) => ['System Variable', categoryLabel(v.category), v.value]),
@@ -516,37 +531,78 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[200px_1fr]">
-            <div className="space-y-3">
-              <label className="block text-xs font-semibold text-slate-600">
-                {t('settings.logo')}
-              </label>
-              <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
-                <img
-                  src={printForm.logoData || BRAND_LOGO_SRC}
-                  alt="Agency logo"
-                  className="max-h-full max-w-full object-contain"
-                />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_1fr]">
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-600">
+                  {t('settings.logo')}
+                </label>
+                <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
+                  <img
+                    src={printForm.logoData || BRAND_LOGO_SRC}
+                    alt="Agency logo"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <Upload className="h-3.5 w-3.5" />
+                  {t('settings.uploadLogo')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => readImageFile(e, 'logoData')}
+                  />
+                </label>
+                {printForm.logoData && (
+                  <button
+                    type="button"
+                    onClick={() => setPrintForm((p) => ({ ...p, logoData: null }))}
+                    className="cursor-pointer text-xs font-semibold text-red-600 hover:underline"
+                  >
+                    {t('settings.removeLogo')}
+                  </button>
+                )}
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                <Upload className="h-3.5 w-3.5" />
-                {t('settings.uploadLogo')}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleLogoChange}
-                />
-              </label>
-              {printForm.logoData && (
-                <button
-                  type="button"
-                  onClick={() => setPrintForm((p) => ({ ...p, logoData: null }))}
-                  className="cursor-pointer text-xs font-semibold text-red-600 hover:underline"
-                >
-                  {t('settings.removeLogo')}
-                </button>
-              )}
+
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-600">
+                  {t('settings.stamp')}
+                </label>
+                <p className="text-[11px] text-slate-500">{t('settings.stampHint')}</p>
+                <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-[repeating-conic-gradient(#e2e8f0_0%_25%,#fff_0%_50%)] bg-[length:12px_12px]">
+                  {printForm.stampData ? (
+                    <img
+                      src={printForm.stampData}
+                      alt="Agency stamp"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <span className="px-3 text-center text-[11px] text-slate-400">
+                      {t('settings.stampEmpty')}
+                    </span>
+                  )}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <Upload className="h-3.5 w-3.5" />
+                  {t('settings.uploadStamp')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => readImageFile(e, 'stampData')}
+                  />
+                </label>
+                {printForm.stampData && (
+                  <button
+                    type="button"
+                    onClick={() => setPrintForm((p) => ({ ...p, stampData: null }))}
+                    className="cursor-pointer text-xs font-semibold text-red-600 hover:underline"
+                  >
+                    {t('settings.removeStamp')}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">

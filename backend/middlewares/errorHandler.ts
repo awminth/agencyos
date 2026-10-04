@@ -4,11 +4,19 @@ export class AppError extends Error {
   statusCode: number;
   /** Optional per-row / field warnings (e.g. Excel import validation). */
   warnings?: string[];
+  /** Machine-readable code for the client (e.g. SESSION_ACTIVE). */
+  code?: string;
 
-  constructor(message: string, statusCode = 400, warnings?: string[]) {
+  constructor(
+    message: string,
+    statusCode = 400,
+    warnings?: string[],
+    code?: string
+  ) {
     super(message);
     this.statusCode = statusCode;
     this.warnings = warnings;
+    this.code = code;
   }
 }
 
@@ -123,6 +131,7 @@ export function errorHandler(
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       error: err.message,
+      ...(err.code ? { code: err.code } : {}),
       ...(err.warnings?.length ? { warnings: err.warnings } : {}),
     });
     return;

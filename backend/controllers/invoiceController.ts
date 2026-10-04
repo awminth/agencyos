@@ -17,6 +17,11 @@ export async function list(req: Request, res: Response): Promise<void> {
 }
 
 export async function create(req: Request, res: Response): Promise<void> {
+  if (Array.isArray(req.body?.selections)) {
+    const result = await invoiceService.createInvoicesBatch(req.body);
+    res.status(201).json(result);
+    return;
+  }
   const invoice = await invoiceService.createInvoice(req.body);
   res.status(201).json(invoice);
 }

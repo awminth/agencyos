@@ -5,6 +5,7 @@ export interface PrintLetterhead {
   registrationNo: string;
   fax: string;
   logoData: string | null;
+  stampData: string | null;
 }
 
 export const EMPTY_LETTERHEAD: PrintLetterhead = {
@@ -14,6 +15,7 @@ export const EMPTY_LETTERHEAD: PrintLetterhead = {
   registrationNo: '',
   fax: '',
   logoData: null,
+  stampData: null,
 };
 
 export function parsePrintLetterheads(data: any): {
@@ -27,6 +29,7 @@ export function parsePrintLetterheads(data: any): {
     registrationNo: src?.registrationNo || '',
     fax: src?.fax || '',
     logoData: src?.logoData || null,
+    stampData: src?.stampData || null,
   });
 
   if (data?.voucher1 || data?.voucher2) {

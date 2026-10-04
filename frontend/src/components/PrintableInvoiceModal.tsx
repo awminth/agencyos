@@ -52,7 +52,12 @@ export const PrintableInvoiceModal: React.FC<PrintableInvoiceModalProps> = ({
       onClose={onClose}
       toolbar={<VoucherSlotTabs activeSlot={activeSlot} onChange={setActiveSlot} />}
     >
-      <FormalInvoiceDocument id={printAreaId} invoice={invoice} issuer={issuer} />
+      <FormalInvoiceDocument
+        id={printAreaId}
+        invoice={invoice}
+        issuer={issuer}
+        voucherSlot={activeSlot}
+      />
     </DocumentSharePreview>
   );
 };

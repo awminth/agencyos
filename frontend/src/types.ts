@@ -24,6 +24,8 @@ export interface AuthUser {
   title: string;
   permissions: UserPermissions;
   avatarUrl?: string;
+  /** Server-issued single-device session token */
+  sessionToken?: string;
 }
 
 export interface DeploymentInfo {
@@ -326,18 +328,21 @@ export interface DashboardStats {
   unsentReceiptsCount: number;
 }
 
+/** One row = one Host Company invoice unit (Supervising Org + Host), not per worker. */
 export interface UpcomingInvoiceReportItem {
-  workerId: string;
-  serialNo: string;
-  workerName: string;
-  passportNo: string;
   hostCompany: string;
   supervisingOrg: string;
+  workerCount: number;
   lastInvoiceDate: string;
   nextInvoiceDate: string;
   daysRemaining: number;
   managementFee: number;
   currency: string;
+  /** @deprecated kept optional for older API payloads */
+  workerId?: string;
+  serialNo?: string;
+  workerName?: string;
+  passportNo?: string;
 }
 
 export interface OutstandingBalanceReportItem {

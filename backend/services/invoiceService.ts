@@ -299,7 +299,8 @@ async function loadLines(invoiceIds: string[]): Promise<Map<string, InvoiceLine[
 
 export async function listWorkersForHost(
   hostCompany: string,
-  supervisingOrg?: string
+  supervisingOrg?: string,
+  options?: { departureDate?: string; workerIds?: string[] }
 ): Promise<
   {
     workerId: string;
@@ -308,6 +309,7 @@ export async function listWorkersForHost(
     passportNo: string;
     supervisingOrg: string;
     hostCompany: string;
+    departureDate: string;
     currency: 'JPY' | 'MMK' | 'USD';
     amounts: { management: number; flight: number; training: number };
   }[]
@@ -322,15 +324,32 @@ export async function listWorkersForHost(
     where.push('d.supervising_org = :supervisingOrg');
     params.supervisingOrg = supervisingOrg.trim();
   }
+  const departureDate = (options?.departureDate || '').trim();
+  if (departureDate) {
+    where.push('d.departure_date = :departureDate');
+    params.departureDate = departureDate.slice(0, 10);
+  }
 
-  const [rows] = await pool.query<HostWorkerRow[]>(
+  const workerIds = (options?.workerIds || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (workerIds.length) {
+    const placeholders = workerIds.map((_, i) => `:wid${i}`).join(', ');
+    workerIds.forEach((id, i) => {
+      params[`wid${i}`] = id;
+    });
+    where.push(`w.id IN (${placeholders})`);
+  }
+
+  const [rows] = await pool.query<(HostWorkerRow & { departure_date?: string | null })[]>(
     `SELECT w.id, w.name, w.serial_no, w.passport_no,
             COALESCE(f.flight_fee, 0) AS flight_fee,
             COALESCE(f.training_fee, 0) AS training_fee,
             COALESCE(f.management_fee, 0) AS management_fee,
             COALESCE(f.billing_cycle_months, 6) AS billing_cycle_months,
             f.currency,
-            d.supervising_org
+            d.supervising_org,
+            d.departure_date
      FROM workers w
      JOIN deployments d ON d.worker_id = w.id
      LEFT JOIN financial_configs f ON f.worker_id = w.id
@@ -346,6 +365,7 @@ export async function listWorkersForHost(
     passportNo: row.passport_no,
     supervisingOrg: row.supervising_org || '',
     hostCompany: host,
+    departureDate: toDateStr(row.departure_date),
     currency: row.currency || 'JPY',
     amounts: {
       management: feeAmountFromRow(row, 'management'),
@@ -423,7 +443,12 @@ export async function getInvoiceById(id: string): Promise<Invoice> {
   return mapInvoice(rows[0], lineMap.get(id) || []);
 }
 
-export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
+type CreateInvoiceBody = Partial<Invoice> & {
+  departureDate?: string;
+  workerIds?: string[];
+};
+
+export async function createInvoice(body: CreateInvoiceBody): Promise<Invoice> {
   await ensureHostInvoiceSchema();
 
   const hostCompany = (body.hostCompany || '').trim();
@@ -432,9 +457,20 @@ export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
   if (!supervisingOrg) throw new AppError('Supervising Org ရွေးချယ်ပါ။', 400);
 
   const feeType = normalizeFeeType(body.feeType);
-  const hostWorkers = await listWorkersForHost(hostCompany, supervisingOrg);
+  const departureDate = (body.departureDate || '').trim().slice(0, 10);
+  if (!departureDate) {
+    throw new AppError('Departure Date ရွေးချယ်ပါ။', 400);
+  }
+
+  const hostWorkers = await listWorkersForHost(hostCompany, supervisingOrg, {
+    departureDate,
+    workerIds: Array.isArray(body.workerIds) ? body.workerIds : undefined,
+  });
   if (hostWorkers.length === 0) {
-    throw new AppError('ဤ Host Company အောက်တွင် Worker မရှိပါ။', 400);
+    throw new AppError(
+      'ဤ Host Company + Departure Date နှင့် ကိုက်ညီသော Worker မရှိပါ။',
+      400
+    );
   }
 
   const computedTotal = hostWorkers.reduce(
@@ -548,6 +584,67 @@ export async function createInvoice(body: Partial<Invoice>): Promise<Invoice> {
   }
 
   return getInvoiceById(id);
+}
+
+/** Create one invoice per Host Company + Departure Date selection (same formal fields). */
+export async function createInvoicesBatch(body: {
+  supervisingOrg?: string;
+  feeType?: Invoice['feeType'];
+  billingPeriod?: string;
+  lastInvoiceDate?: string;
+  nextInvoiceDate?: string;
+  receiptSentDate?: string;
+  notes?: string;
+  billedToAttn?: string;
+  subject?: string;
+  taxRate?: number;
+  bankAccountId?: string;
+  currency?: Invoice['currency'];
+  selections?: Array<{
+    hostCompany?: string;
+    departureDate?: string;
+    workerIds?: string[];
+    totalAmount?: number;
+    invoiceNo?: string;
+    billingPeriod?: string;
+    subject?: string;
+  }>;
+}): Promise<{ invoices: Invoice[]; count: number }> {
+  const selections = Array.isArray(body.selections) ? body.selections : [];
+  if (selections.length === 0) {
+    throw new AppError('Host Company + Departure Date အနည်းဆုံး တစ်ခု ရွေးပါ။', 400);
+  }
+
+  const invoices: Invoice[] = [];
+  for (let i = 0; i < selections.length; i++) {
+    const sel = selections[i];
+    const host = (sel.hostCompany || '').trim();
+    const invoice = await createInvoice({
+      supervisingOrg: body.supervisingOrg,
+      feeType: body.feeType,
+      hostCompany: host,
+      departureDate: sel.departureDate,
+      workerIds: sel.workerIds,
+      totalAmount: sel.totalAmount,
+      invoiceNo: sel.invoiceNo,
+      billingPeriod:
+        sel.billingPeriod ||
+        body.billingPeriod ||
+        defaultBillingPeriod(normalizeFeeType(body.feeType), host),
+      lastInvoiceDate: body.lastInvoiceDate,
+      nextInvoiceDate: body.nextInvoiceDate,
+      receiptSentDate: body.receiptSentDate,
+      notes: body.notes,
+      billedToAttn: body.billedToAttn,
+      subject: sel.subject || body.subject,
+      taxRate: body.taxRate,
+      bankAccountId: body.bankAccountId,
+      currency: body.currency,
+    });
+    invoices.push(invoice);
+  }
+
+  return { invoices, count: invoices.length };
 }
 
 export async function updateInvoice(id: string, body: Partial<Invoice>): Promise<Invoice> {

@@ -18,6 +18,7 @@ import {
   ensurePushSubscriptionsTable,
 } from './services/pushService.js';
 import { ensureHelpChatUsageTable } from './services/helpChatService.js';
+import { ensureUserSessionsTable } from './services/authService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,6 +38,7 @@ async function start() {
     await ensureHostInvoiceSchema();
     await ensurePushSubscriptionsTable();
     await ensureHelpChatUsageTable();
+    await ensureUserSessionsTable();
   } catch (err) {
     console.error('MySQL connection failed. Check DB_* in .env and run: npm run init-db');
     console.error(err);

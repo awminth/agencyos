@@ -17,6 +17,8 @@ export interface PrintSettings {
   registrationNo: string;
   fax: string;
   logoData: string | null;
+  /** Company rubber-stamp image (data URL) shown on formal invoices */
+  stampData: string | null;
 }
 
 export type PrintVoucherSlot = 1 | 2;
@@ -65,6 +67,7 @@ interface PrintRow extends RowDataPacket {
   registration_no?: string | null;
   fax?: string | null;
   logo_data: string | null;
+  stamp_data?: string | null;
 }
 
 interface BankAccountRow extends RowDataPacket {
@@ -163,6 +166,7 @@ function emptyPrint(): PrintSettings {
     registrationNo: '',
     fax: '',
     logoData: null,
+    stampData: null,
   };
 }
 
@@ -175,6 +179,7 @@ function mapPrintRow(row: PrintRow | undefined): PrintSettings {
     registrationNo: row.registration_no || '',
     fax: row.fax || '',
     logoData: row.logo_data || null,
+    stampData: row.stamp_data || null,
   };
 }
 
@@ -197,11 +202,12 @@ function normalizeSlot(slot: number | undefined): PrintVoucherSlot {
   return slot === 2 ? 2 : 1;
 }
 
-/** Ensure print_settings has registration_no / fax columns and voucher slots. */
+/** Ensure print_settings has registration_no / fax / stamp columns and voucher slots. */
 export async function ensurePrintSettingsSlots(): Promise<void> {
   for (const col of [
     `ALTER TABLE print_settings ADD COLUMN registration_no VARCHAR(80) NULL AFTER phone`,
     `ALTER TABLE print_settings ADD COLUMN fax VARCHAR(50) NULL AFTER registration_no`,
+    `ALTER TABLE print_settings ADD COLUMN stamp_data LONGTEXT NULL AFTER logo_data`,
   ]) {
     try {
       await pool.execute(col);
@@ -217,12 +223,13 @@ export async function ensurePrintSettingsSlots(): Promise<void> {
      VALUES (1, '', NULL, NULL, NULL)`
   );
   const [rows] = await pool.execute<PrintRow[]>(
-    `SELECT agency_name, address, phone, registration_no, fax, logo_data FROM print_settings WHERE id = 1 LIMIT 1`
+    `SELECT agency_name, address, phone, registration_no, fax, logo_data, stamp_data
+     FROM print_settings WHERE id = 1 LIMIT 1`
   );
   const src = rows[0];
   await pool.execute(
-    `INSERT IGNORE INTO print_settings (id, agency_name, address, phone, registration_no, fax, logo_data)
-     VALUES (2, :agencyName, :address, :phone, :registrationNo, :fax, :logoData)`,
+    `INSERT IGNORE INTO print_settings (id, agency_name, address, phone, registration_no, fax, logo_data, stamp_data)
+     VALUES (2, :agencyName, :address, :phone, :registrationNo, :fax, :logoData, :stampData)`,
     {
       agencyName: src?.agency_name || '',
       address: src?.address || null,
@@ -230,6 +237,7 @@ export async function ensurePrintSettingsSlots(): Promise<void> {
       registrationNo: src?.registration_no || null,
       fax: src?.fax || null,
       logoData: src?.logo_data || null,
+      stampData: src?.stamp_data || null,
     }
   );
 }
@@ -256,7 +264,8 @@ export async function ensureBankAccountsTable(): Promise<void> {
 export async function getPrintSettings(slot: PrintVoucherSlot = 1): Promise<PrintSettings> {
   await ensurePrintSettingsSlots();
   const [rows] = await pool.execute<PrintRow[]>(
-    `SELECT agency_name, address, phone, registration_no, fax, logo_data FROM print_settings WHERE id = :id LIMIT 1`,
+    `SELECT agency_name, address, phone, registration_no, fax, logo_data, stamp_data
+     FROM print_settings WHERE id = :id LIMIT 1`,
     { id: slot }
   );
   return mapPrintRow(rows[0]);
@@ -265,7 +274,8 @@ export async function getPrintSettings(slot: PrintVoucherSlot = 1): Promise<Prin
 export async function getBothPrintSettings(): Promise<BothPrintSettings> {
   await ensurePrintSettingsSlots();
   const [rows] = await pool.execute<PrintRow[]>(
-    `SELECT id, agency_name, address, phone, registration_no, fax, logo_data FROM print_settings WHERE id IN (1, 2)`
+    `SELECT id, agency_name, address, phone, registration_no, fax, logo_data, stamp_data
+     FROM print_settings WHERE id IN (1, 2)`
   );
   const byId = new Map<number, PrintRow>();
   for (const row of rows) {
@@ -285,6 +295,7 @@ export async function updatePrintSettings(
     registrationNo?: string;
     fax?: string;
     logoData?: string | null;
+    stampData?: string | null;
     slot?: number;
   }
 ): Promise<BothPrintSettings> {
@@ -298,18 +309,30 @@ export async function updatePrintSettings(
   const fax = (input.fax ?? current.fax ?? '').trim() || null;
   const logoData =
     input.logoData !== undefined ? input.logoData : current.logoData;
+  const stampData =
+    input.stampData !== undefined ? input.stampData : current.stampData;
 
   await pool.execute(
-    `INSERT INTO print_settings (id, agency_name, address, phone, registration_no, fax, logo_data)
-     VALUES (:id, :agencyName, :address, :phone, :registrationNo, :fax, :logoData)
+    `INSERT INTO print_settings (id, agency_name, address, phone, registration_no, fax, logo_data, stamp_data)
+     VALUES (:id, :agencyName, :address, :phone, :registrationNo, :fax, :logoData, :stampData)
      ON DUPLICATE KEY UPDATE
        agency_name = VALUES(agency_name),
        address = VALUES(address),
        phone = VALUES(phone),
        registration_no = VALUES(registration_no),
        fax = VALUES(fax),
-       logo_data = VALUES(logo_data)`,
-    { id: slot, agencyName, address, phone, registrationNo, fax, logoData }
+       logo_data = VALUES(logo_data),
+       stamp_data = VALUES(stamp_data)`,
+    {
+      id: slot,
+      agencyName,
+      address,
+      phone,
+      registrationNo,
+      fax,
+      logoData,
+      stampData,
+    }
   );
 
   return getBothPrintSettings();

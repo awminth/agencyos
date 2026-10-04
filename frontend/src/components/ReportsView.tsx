@@ -285,11 +285,12 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
       subtitle: t('reports.voucherUpcomingSubtitle'),
       badge: t('reports.badgeUpcoming'),
       fields: [
-        { label: t('reports.colWorker'), value: item.workerName },
-        { label: t('reports.colSerial'), value: item.serialNo },
-        { label: t('reports.colPassport'), value: item.passportNo },
-        { label: t('reports.colHostCompany'), value: item.hostCompany },
         { label: t('reports.colSupervisingOrg'), value: item.supervisingOrg },
+        { label: t('reports.colHostCompany'), value: item.hostCompany },
+        {
+          label: t('reports.colWorkerCount'),
+          value: String(item.workerCount ?? 0),
+        },
         { label: t('reports.colLastInvoice'), value: item.lastInvoiceDate },
         { label: t('reports.colNextInvoice'), value: item.nextInvoiceDate },
         {
@@ -408,22 +409,18 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
 
   const exportUpcomingExcel = () => {
     const headers = [
-      t('reports.colSerial'),
-      t('reports.colWorkerName'),
-      t('reports.colPassport'),
-      t('reports.colHostCompany'),
       t('reports.colSupervisingOrg'),
+      t('reports.colHostCompany'),
+      t('reports.colWorkerCount'),
       t('reports.colLastInvoice'),
       t('reports.colNextInvoice'),
       t('reports.colDaysRemaining'),
       `${t('reports.colAmountDue')} (${currencyLabel})`,
     ];
     const rows = upcomingData.map((item) => [
-      item.serialNo,
-      item.workerName,
-      item.passportNo,
-      item.hostCompany,
       item.supervisingOrg,
+      item.hostCompany,
+      item.workerCount ?? 0,
       item.lastInvoiceDate,
       item.nextInvoiceDate,
       item.daysRemaining,
@@ -436,25 +433,21 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
 
   const exportUpcomingPdf = () => {
     const headers = [
-      t('reports.colSerial'),
-      t('reports.colWorkerName'),
-      t('reports.colPassport'),
-      t('reports.colHostCompany'),
       t('reports.colSupervisingOrg'),
+      t('reports.colHostCompany'),
+      t('reports.colWorkerCount'),
       t('reports.colLastInvoice'),
       t('reports.colNextInvoice'),
       t('reports.colDaysRemaining'),
       `${t('reports.colAmountDue')} (${currencyLabel})`,
     ];
     const rows = upcomingData.map((item) => [
-      item.serialNo,
-      item.workerName,
-      item.passportNo,
-      item.hostCompany,
       item.supervisingOrg,
+      item.hostCompany,
+      String(item.workerCount ?? 0),
       item.lastInvoiceDate,
       item.nextInvoiceDate,
-      item.daysRemaining,
+      String(item.daysRemaining),
       money(item.managementFee, item.currency || 'JPY'),
     ]);
     exportToPDF(`${t('reports.upcomingTableTitle')} — ${currencyLabel}`, headers, rows, {
@@ -774,11 +767,19 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
                     </p>
                   ) : (
                     upPaged.map((item, idx) => (
-                      <div key={idx} className="mobile-list-row">
+                      <div
+                        key={`${item.supervisingOrg}-${item.hostCompany}-${idx}`}
+                        className="mobile-list-row"
+                      >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 truncate text-sm font-bold text-slate-900">
-                            {item.workerName}
-                          </p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">
+                              {item.hostCompany}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                              {item.supervisingOrg}
+                            </p>
+                          </div>
                           <span
                             className={`status-badge shrink-0 ${
                               item.daysRemaining <= 7
@@ -794,10 +795,12 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
 
                         <MobileMeta
                           items={[
-                            { label: t('reports.colSerial'), value: item.serialNo },
-                            { label: t('reports.colPassport'), value: item.passportNo },
-                            { label: t('reports.colHost'), value: item.hostCompany },
                             { label: t('reports.colSupervisingOrg'), value: item.supervisingOrg },
+                            { label: t('reports.colHostCompany'), value: item.hostCompany },
+                            {
+                              label: t('reports.colWorkerCount'),
+                              value: String(item.workerCount ?? 0),
+                            },
                             { label: t('reports.colLastInvoice'), value: item.lastInvoiceDate },
                             { label: t('reports.colNextInvoice'), value: item.nextInvoiceDate },
                             { label: t('reports.colDaysRemaining'), value: dayLabel(item.daysRemaining) },
@@ -829,10 +832,9 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>{t('reports.colWorkerSerial')}</th>
-                        <th>{t('reports.colPassport')}</th>
-                        <th>{t('reports.colHostCompany')}</th>
                         <th>{t('reports.colSupervisingOrg')}</th>
+                        <th>{t('reports.colHostCompany')}</th>
+                        <th className="text-center">{t('reports.colWorkerCount')}</th>
                         <th>{t('reports.colLastInvoice')}</th>
                         <th>{t('reports.colNextInvoice')}</th>
                         <th className="text-center">{t('reports.colDaysRemaining')}</th>
@@ -845,27 +847,23 @@ export const ReportsView: React.FC<{ activeSection: ReportSection }> = ({
                     <tbody>
                       {upPaged.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="empty-cell">
+                          <td colSpan={8} className="empty-cell">
                             {t('reports.upcomingEmpty')}
                           </td>
                         </tr>
                       ) : (
                         upPaged.map((item, idx) => (
-                          <tr key={idx}>
+                          <tr key={`${item.supervisingOrg}-${item.hostCompany}-${idx}`}>
                             <td>
-                              <div className="cell-stack">
-                                <span className="cell-primary">{item.workerName}</span>
-                                <span className="cell-id">{item.serialNo}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <span className="cell-mono">{item.passportNo}</span>
+                              <span className="cell-primary">{item.supervisingOrg}</span>
                             </td>
                             <td>
                               <span className="cell-primary">{item.hostCompany}</span>
                             </td>
-                            <td>
-                              <span className="cell-secondary">{item.supervisingOrg}</span>
+                            <td className="text-center">
+                              <span className="cell-mono font-semibold">
+                                {item.workerCount ?? 0}
+                              </span>
                             </td>
                             <td>
                               <span className="cell-secondary font-mono">

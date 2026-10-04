@@ -34,7 +34,7 @@ import { LoginPage } from './components/LoginPage';
 import { BottomNav } from './components/BottomNav';
 import { NotificationsView } from './components/NotificationsView';
 import { useLanguage } from './context/LanguageContext';
-import { can, normalizePermissions } from './utils/permissions';
+import { authHeaders, can, normalizePermissions } from './utils/permissions';
 import { confirmDelete, showSuccess, showWarning } from './utils/swal';
 import { parseApiResponse } from './utils/api';
 import { StudentFormPage } from './components/StudentFormPage';
@@ -73,6 +73,8 @@ function normalizeStoredUser(raw: unknown): AuthUser | null {
   if (!raw || typeof raw !== 'object') return null;
   const u = raw as Partial<AuthUser>;
   if (!u.id || !u.email || !u.role) return null;
+  // Require server session token (single-device login); legacy local sessions must re-login
+  if (typeof u.sessionToken !== 'string' || !u.sessionToken.trim()) return null;
   const role = u.role as UserRole;
   return {
     id: u.id,
@@ -81,6 +83,7 @@ function normalizeStoredUser(raw: unknown): AuthUser | null {
     role,
     title: u.title || `${role} User`,
     permissions: normalizePermissions(u.permissions, role),
+    sessionToken: u.sessionToken.trim(),
   };
 }
 
@@ -125,16 +128,67 @@ export default function App() {
     const normalized: AuthUser = {
       ...user,
       permissions: normalizePermissions(user.permissions, user.role),
+      sessionToken: user.sessionToken,
     };
     setCurrentUser(normalized);
     persistUserSession(normalized, rememberMe);
   };
 
-  const handleLogout = () => {
+  const clearLocalSession = () => {
     setCurrentUser(null);
     localStorage.removeItem('agency_os_user');
     sessionStorage.removeItem('agency_os_user');
   };
+
+  const handleLogout = () => {
+    const user = currentUser;
+    clearLocalSession();
+    if (user?.id && user.sessionToken) {
+      void fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: authHeaders(user.id, user.sessionToken),
+        body: JSON.stringify({ userId: user.id, sessionToken: user.sessionToken }),
+      }).catch(() => undefined);
+    }
+  };
+
+  // Keep single-device session alive; kick local user if session became invalid
+  useEffect(() => {
+    if (!currentUser?.id || !currentUser.sessionToken) return;
+
+    let cancelled = false;
+
+    const beat = async () => {
+      try {
+        const res = await fetch('/api/auth/heartbeat', {
+          method: 'POST',
+          headers: authHeaders(currentUser.id, currentUser.sessionToken),
+          body: JSON.stringify({
+            userId: currentUser.id,
+            sessionToken: currentUser.sessionToken,
+          }),
+        });
+        if (cancelled) return;
+        if (res.status === 401) {
+          const data = await res.json().catch(() => ({}));
+          clearLocalSession();
+          await showWarning(
+            t('login.sessionActiveTitle'),
+            typeof data.error === 'string' ? data.error : t('login.sessionRevoked')
+          );
+        }
+      } catch {
+        /* offline — ignore */
+      }
+    };
+
+    void beat();
+    const id = window.setInterval(() => void beat(), 2 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [currentUser?.id, currentUser?.sessionToken, t]);
 
   // Data States
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -542,7 +596,7 @@ export default function App() {
   };
 
   // INVOICE CRUD HANDLERS
-  const handleSaveInvoice = async (payload: Partial<Invoice>) => {
+  const handleSaveInvoice = async (payload: Partial<Invoice> & Record<string, unknown>) => {
     const wasEdit = !!editingInvoice;
     try {
       const res = editingInvoice
@@ -557,7 +611,10 @@ export default function App() {
             body: JSON.stringify(payload),
           });
 
-      await parseApiResponse(res);
+      const data = await parseApiResponse<{
+        invoices?: Invoice[];
+        count?: number;
+      } & Invoice>(res);
       const returnTo = invoiceWorkerReturn;
       setEditingInvoice(null);
       setCreatePreferredHostCompany(undefined);
@@ -565,7 +622,19 @@ export default function App() {
       setInvoiceWorkerReturn(null);
       setFormPage(returnTo ? { kind: 'invoiceWorker', summary: returnTo } : null);
       await refreshAllData();
-      await showSuccess(wasEdit ? 'Update အောင်မြင်ပါသည်' : 'Invoice ထုတ်ပြီးပါပြီ');
+      const batchCount =
+        !wasEdit && Array.isArray(data?.invoices)
+          ? data.invoices.length
+          : typeof data?.count === 'number'
+            ? data.count
+            : 0;
+      await showSuccess(
+        wasEdit
+          ? 'Update အောင်မြင်ပါသည်'
+          : batchCount > 1
+            ? `Invoice ${batchCount} စောင် ထုတ်ပြီးပါပြီ`
+            : 'Invoice ထုတ်ပြီးပါပြီ'
+      );
     } catch (err) {
       console.error('Save invoice failed', err);
       const message =

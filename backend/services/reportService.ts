@@ -11,73 +11,60 @@ function resolveFeeStatus(totalDue: number, amountReceived: number): FeePaymentS
   return 'Partial';
 }
 
+/**
+ * Upcoming management invoices — only hosts that already have a management invoice.
+ * Uses each issued invoice's next_invoice_date (no departure-date fallback for never-invoiced hosts).
+ */
 export async function getUpcomingInvoicesReport() {
-  const [rows] = await pool.query<RowDataPacket[]>(`
+  const nextMonthStr = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
+
+  const [invoiceRows] = await pool.query<RowDataPacket[]>(`
     SELECT
-      w.id AS workerId,
-      w.serial_no AS serialNo,
-      w.name AS workerName,
-      w.passport_no AS passportNo,
-      d.host_company AS hostCompany,
-      d.supervising_org AS supervisingOrg,
-      d.departure_date AS departureDate,
-      f.management_fee AS managementFee,
-      f.billing_cycle_months AS billingCycleMonths,
+      i.id AS invoiceId,
+      i.host_company AS hostCompany,
+      i.supervising_org AS supervisingOrg,
+      i.last_invoice_date AS lastInvoiceDate,
+      i.next_invoice_date AS nextInvoiceDate,
+      i.total_amount AS totalAmount,
+      COALESCE(i.currency, 'JPY') AS currency,
       (
-        SELECT i.last_invoice_date FROM invoices i
-        WHERE i.worker_id = w.id AND i.fee_type = 'management'
-        ORDER BY i.next_invoice_date DESC LIMIT 1
-      ) AS lastInvoiceDate,
-      (
-        SELECT i.next_invoice_date FROM invoices i
-        WHERE i.worker_id = w.id AND i.fee_type = 'management'
-        ORDER BY i.next_invoice_date DESC LIMIT 1
-      ) AS nextInvoiceDate
-    FROM workers w
-    LEFT JOIN deployments d ON d.worker_id = w.id
-    LEFT JOIN financial_configs f ON f.worker_id = w.id
-    WHERE w.status = 'Active'
-  `);
+        SELECT COUNT(*)
+        FROM invoice_lines l
+        WHERE l.invoice_id = i.id
+      ) AS workerCount
+    FROM invoices i
+    WHERE i.fee_type = 'management'
+      AND i.host_company IS NOT NULL
+      AND i.host_company <> ''
+      AND i.next_invoice_date IS NOT NULL
+      AND i.next_invoice_date <= :nextMonth
+    ORDER BY i.next_invoice_date ASC, i.host_company ASC
+  `, { nextMonth: nextMonthStr });
 
   const today = new Date();
-  const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  const nextMonthStr = nextMonth.toISOString().split('T')[0];
-  const todayStr = today.toISOString().split('T')[0];
+  today.setHours(0, 0, 0, 0);
 
-  const items = [];
+  return invoiceRows.map((inv) => {
+    const nextDate = toDateStr(inv.nextInvoiceDate);
+    const daysRemaining = nextDate
+      ? Math.ceil(
+          (new Date(nextDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      : 0;
 
-  for (const row of rows) {
-    let lastDate = row.lastInvoiceDate ? toDateStr(row.lastInvoiceDate) : '';
-    let nextDate = row.nextInvoiceDate ? toDateStr(row.nextInvoiceDate) : '';
-
-    if (!nextDate) {
-      lastDate = toDateStr(row.departureDate) || todayStr;
-      const d = new Date(lastDate);
-      d.setMonth(d.getMonth() + (num(row.billingCycleMonths, 6) || 6));
-      nextDate = d.toISOString().split('T')[0];
-    }
-
-    if (nextDate <= nextMonthStr) {
-      const daysRemaining = Math.ceil(
-        (new Date(nextDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      items.push({
-        workerId: row.workerId,
-        serialNo: row.serialNo,
-        workerName: row.workerName,
-        passportNo: row.passportNo,
-        hostCompany: row.hostCompany || 'N/A',
-        supervisingOrg: row.supervisingOrg || 'N/A',
-        lastInvoiceDate: lastDate,
-        nextInvoiceDate: nextDate,
-        daysRemaining,
-        managementFee: num(row.managementFee) * num(row.billingCycleMonths, 6),
-        currency: 'JPY',
-      });
-    }
-  }
-
-  return items;
+    return {
+      hostCompany: String(inv.hostCompany || '').trim(),
+      supervisingOrg: String(inv.supervisingOrg || '').trim() || 'N/A',
+      workerCount: num(inv.workerCount),
+      lastInvoiceDate: toDateStr(inv.lastInvoiceDate) || '—',
+      nextInvoiceDate: nextDate,
+      daysRemaining,
+      managementFee: num(inv.totalAmount),
+      currency: String(inv.currency || 'JPY'),
+    };
+  });
 }
 
 export async function getOutstandingBalancesReport() {

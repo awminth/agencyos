@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Invoice, InvoiceFeeType, Worker } from '../types';
-import { ArrowLeft, Receipt, Save, Building2 } from 'lucide-react';
+import { ArrowLeft, Receipt, Save, Building2, Plus, Trash2 } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLanguage } from '../context/LanguageContext';
 import { currencySymbol, type MoneyCurrency } from '../utils/currency';
@@ -16,6 +16,12 @@ interface SystemVariable {
   parentValue?: string | null;
 }
 
+interface HostDepartureRow {
+  key: string;
+  hostCompany: string;
+  departureDate: string;
+}
+
 interface InvoiceFormPageProps {
   invoice: Invoice | null;
   workers: Worker[];
@@ -23,7 +29,7 @@ interface InvoiceFormPageProps {
   preferredHostCompany?: string;
   preferredSupervisingOrg?: string;
   onBack: () => void;
-  onSave: (data: Partial<Invoice>) => void | Promise<void>;
+  onSave: (data: Partial<Invoice> & Record<string, unknown>) => void | Promise<void>;
 }
 
 function amountForFee(worker: Worker, feeType: InvoiceFeeType): number {
@@ -53,6 +59,15 @@ function feeLabel(t: (k: string) => string, feeType: InvoiceFeeType) {
   return t('workerModal.managementFee');
 }
 
+function dateKey(value?: string): string {
+  if (!value) return '';
+  return String(value).trim().slice(0, 10);
+}
+
+function newRowKey() {
+  return `row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
   invoice,
   workers,
@@ -72,15 +87,19 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
   const [selectedOrg, setSelectedOrg] = useState(
     invoice?.supervisingOrg || preferredSupervisingOrg || ''
   );
-  const [selectedHost, setSelectedHost] = useState(
-    invoice?.hostCompany || preferredHostCompany || ''
-  );
+  const [hostRows, setHostRows] = useState<HostDepartureRow[]>(() => [
+    {
+      key: newRowKey(),
+      hostCompany: preferredHostCompany || '',
+      departureDate: '',
+    },
+  ]);
   const [invoiceNo, setInvoiceNo] = useState(
     invoice?.invoiceNo ||
       `INV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
   );
   const [billingPeriod, setBillingPeriod] = useState(
-    invoice?.billingPeriod || periodForFee(feeType, selectedHost || 'Host')
+    invoice?.billingPeriod || periodForFee(feeType, preferredHostCompany || 'Host')
   );
   const [lastInvoiceDate, setLastInvoiceDate] = useState(
     invoice?.lastInvoiceDate || new Date().toISOString().split('T')[0]
@@ -127,69 +146,150 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
     );
   }, [hostVars, selectedOrg, workers]);
 
-  const hostWorkers = useMemo(() => {
-    if (!selectedHost) return [];
+  const departureOptionsForHost = (hostCompany: string): string[] => {
+    if (!hostCompany) return [];
+    const dates = workers
+      .filter(
+        (w) =>
+          w.deployment.hostCompany === hostCompany &&
+          (!selectedOrg || w.deployment.supervisingOrg === selectedOrg) &&
+          dateKey(w.deployment.departureDate)
+      )
+      .map((w) => dateKey(w.deployment.departureDate));
+    return Array.from(new Set(dates)).sort();
+  };
+
+  const workersForRow = (row: HostDepartureRow): Worker[] => {
+    if (!row.hostCompany || !row.departureDate) return [];
+    const dep = dateKey(row.departureDate);
     return workers
       .filter(
         (w) =>
-          w.deployment.hostCompany === selectedHost &&
-          (!selectedOrg || w.deployment.supervisingOrg === selectedOrg)
+          w.deployment.hostCompany === row.hostCompany &&
+          (!selectedOrg || w.deployment.supervisingOrg === selectedOrg) &&
+          dateKey(w.deployment.departureDate) === dep
       )
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [workers, selectedHost, selectedOrg]);
+  };
+
+  const selectedWorkers = useMemo(() => {
+    const list: { row: HostDepartureRow; worker: Worker }[] = [];
+    for (const row of hostRows) {
+      for (const worker of workersForRow(row)) {
+        list.push({ row, worker });
+      }
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- workersForRow depends on workers/selectedOrg
+  }, [hostRows, workers, selectedOrg]);
 
   const computedTotal = useMemo(
-    () => hostWorkers.reduce((sum, w) => sum + amountForFee(w, feeType), 0),
-    [hostWorkers, feeType]
+    () => selectedWorkers.reduce((sum, { worker }) => sum + amountForFee(worker, feeType), 0),
+    [selectedWorkers, feeType]
   );
 
-  const [totalAmount, setTotalAmount] = useState<number>(invoice?.totalAmount ?? computedTotal);
+  const [totalAmount, setTotalAmount] = useState<number>(invoice?.totalAmount ?? 0);
 
   useEffect(() => {
     if (!isEdit) {
       setTotalAmount(computedTotal);
-      if (selectedHost) {
-        setBillingPeriod(periodForFee(feeType, selectedHost));
+      const firstHost = hostRows.find((r) => r.hostCompany)?.hostCompany || '';
+      if (firstHost) {
+        setBillingPeriod(periodForFee(feeType, firstHost));
         setFormal((prev) => ({
           ...prev,
-          subject: prev.subject || periodForFee(feeType, selectedHost),
+          subject: prev.subject || periodForFee(feeType, firstHost),
         }));
       }
     }
-  }, [computedTotal, selectedHost, feeType, isEdit]);
+  }, [computedTotal, hostRows, feeType, isEdit]);
 
   const currency: MoneyCurrency =
     (invoice?.currency as MoneyCurrency | undefined) ||
-    hostWorkers[0]?.financialConfig?.currency ||
+    selectedWorkers[0]?.worker.financialConfig?.currency ||
     'JPY';
   const entrySymbol = currencySymbol(currency);
 
+  const updateHostRow = (key: string, patch: Partial<HostDepartureRow>) => {
+    setHostRows((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, ...patch } : row))
+    );
+  };
+
+  const addHostRow = () => {
+    setHostRows((prev) => [
+      ...prev,
+      { key: newRowKey(), hostCompany: '', departureDate: '' },
+    ]);
+  };
+
+  const removeHostRow = (key: string) => {
+    setHostRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEdit && (!selectedOrg || !selectedHost)) return;
+    if (isEdit) {
+      const payload: Partial<Invoice> = {
+        supervisingOrg: invoice?.supervisingOrg,
+        hostCompany: invoice?.hostCompany,
+        feeType,
+        invoiceNo,
+        billingPeriod,
+        lastInvoiceDate,
+        nextInvoiceDate,
+        totalAmount,
+        receiptSentDate: receiptSentDate || undefined,
+        currency,
+        notes,
+        billedToAttn: formal.billedToAttn,
+        subject: formal.subject,
+        taxRate: formal.taxRate,
+        bankAccountId: formal.bankAccountId,
+      };
+      setSaving(true);
+      try {
+        await onSave(payload);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
-    const payload: Partial<Invoice> = {
-      supervisingOrg: selectedOrg,
-      hostCompany: selectedHost,
-      feeType,
-      invoiceNo,
-      billingPeriod,
-      lastInvoiceDate,
-      nextInvoiceDate,
-      totalAmount,
-      receiptSentDate: receiptSentDate || undefined,
-      currency,
-      notes,
-      billedToAttn: formal.billedToAttn,
-      subject: formal.subject,
-      taxRate: formal.taxRate,
-      bankAccountId: formal.bankAccountId,
-    };
+    if (!selectedOrg) return;
+    const selections = hostRows
+      .map((row) => {
+        const rowWorkers = workersForRow(row);
+        return {
+          hostCompany: row.hostCompany.trim(),
+          departureDate: dateKey(row.departureDate),
+          workerIds: rowWorkers.map((w) => w.id),
+          totalAmount: rowWorkers.reduce((sum, w) => sum + amountForFee(w, feeType), 0),
+          billingPeriod: periodForFee(feeType, row.hostCompany.trim()),
+          subject: formal.subject || periodForFee(feeType, row.hostCompany.trim()),
+        };
+      })
+      .filter((s) => s.hostCompany && s.departureDate && s.workerIds.length > 0);
+
+    if (selections.length === 0) return;
 
     setSaving(true);
     try {
-      await onSave(payload);
+      await onSave({
+        supervisingOrg: selectedOrg,
+        feeType,
+        lastInvoiceDate,
+        nextInvoiceDate,
+        receiptSentDate: receiptSentDate || undefined,
+        currency,
+        notes,
+        billedToAttn: formal.billedToAttn,
+        subject: formal.subject,
+        taxRate: formal.taxRate,
+        bankAccountId: formal.bankAccountId,
+        selections,
+      });
     } finally {
       setSaving(false);
     }
@@ -197,6 +297,13 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
 
   const inputClass =
     'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none sm:text-sm';
+
+  const canSubmitCreate =
+    !!selectedOrg &&
+    hostRows.some((row) => workersForRow(row).length > 0) &&
+    !!formal.bankAccountId &&
+    !!formal.billedToAttn.trim() &&
+    !!formal.subject.trim();
 
   return (
     <div className="space-y-5">
@@ -222,17 +329,17 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
 
       <form onSubmit={handleSubmit} className="bento-card max-w-3xl space-y-5 p-5 sm:p-6">
         {!isEdit ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">
-                {t('workerModal.org')}
+                {t('workerModal.org')} *
               </label>
               <select
                 required
                 value={selectedOrg}
                 onChange={(e) => {
                   setSelectedOrg(e.target.value);
-                  setSelectedHost('');
+                  setHostRows([{ key: newRowKey(), hostCompany: '', departureDate: '' }]);
                 }}
                 className={`${inputClass} cursor-pointer`}
               >
@@ -244,24 +351,111 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">
-                {t('workerModal.host')}
-              </label>
-              <select
-                required
-                value={selectedHost}
-                onChange={(e) => setSelectedHost(e.target.value)}
-                disabled={!selectedOrg}
-                className={`${inputClass} cursor-pointer disabled:opacity-60`}
-              >
-                <option value="">—</option>
-                {hostOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold tracking-wider text-slate-700 uppercase">
+                  {t('invoices.hostDepartureSection')}
+                </h4>
+                <button
+                  type="button"
+                  onClick={addHostRow}
+                  disabled={!selectedOrg}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {t('invoices.addHostRow')}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">{t('invoices.hostDepartureHint')}</p>
+
+              {hostRows.map((row, index) => {
+                const depOptions = departureOptionsForHost(row.hostCompany);
+                const rowWorkers = workersForRow(row);
+                return (
+                  <div
+                    key={row.key}
+                    className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-slate-500">
+                        {t('invoices.hostRowLabel', { n: index + 1 })}
+                      </span>
+                      {hostRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeHostRow(row.key)}
+                          className="action-btn action-btn-red"
+                          title={t('common.delete')}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+                          {t('workerModal.host')} *
+                        </label>
+                        <select
+                          required
+                          value={row.hostCompany}
+                          disabled={!selectedOrg}
+                          onChange={(e) =>
+                            updateHostRow(row.key, {
+                              hostCompany: e.target.value,
+                              departureDate: '',
+                            })
+                          }
+                          className={`${inputClass} cursor-pointer disabled:opacity-60`}
+                        >
+                          <option value="">—</option>
+                          {hostOptions.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+                          {t('deployments.colDeparture')} *
+                        </label>
+                        <select
+                          required
+                          value={row.departureDate}
+                          disabled={!row.hostCompany}
+                          onChange={(e) =>
+                            updateHostRow(row.key, { departureDate: e.target.value })
+                          }
+                          className={`${inputClass} cursor-pointer font-mono disabled:opacity-60`}
+                        >
+                          <option value="">—</option>
+                          {depOptions.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                        {row.hostCompany && depOptions.length === 0 && (
+                          <p className="mt-1 text-[10px] text-amber-700">
+                            {t('invoices.noDepartureDates')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {row.hostCompany && row.departureDate && (
+                      <p className="text-[11px] font-semibold text-slate-600">
+                        {t('invoices.rowWorkerCount', { count: rowWorkers.length })} ·{' '}
+                        {formatMoney(
+                          rowWorkers.reduce((s, w) => s + amountForFee(w, feeType), 0),
+                          currency
+                        )}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -288,34 +482,43 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
           <strong className="text-slate-900">{feeLabel(t, feeType)}</strong>
         </div>
 
-        {!isEdit && selectedHost && (
+        {!isEdit && (
           <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
             <h4 className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-blue-700 uppercase">
               <Building2 className="h-4 w-4" />
-              {t('invoices.hostWorkers')} ({hostWorkers.length})
+              {t('invoices.hostWorkers')} ({selectedWorkers.length})
             </h4>
-            {hostWorkers.length === 0 ? (
+            {selectedWorkers.length === 0 ? (
               <p className="text-[11px] text-amber-700">{t('invoices.hostWorkersEmpty')}</p>
             ) : (
-              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+              <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-left text-slate-500">
                       <th className="px-3 py-2 font-semibold">{t('workers.colName')}</th>
+                      <th className="px-3 py-2 font-semibold">{t('workerModal.host')}</th>
+                      <th className="px-3 py-2 font-semibold">{t('deployments.colDeparture')}</th>
                       <th className="px-3 py-2 text-right font-semibold">{feeLabel(t, feeType)}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {hostWorkers.map((worker) => (
-                      <tr key={worker.id} className="border-b border-slate-50">
+                    {selectedWorkers.map(({ row, worker }) => (
+                      <tr key={`${row.key}-${worker.id}`} className="border-b border-slate-50">
                         <td className="px-3 py-2">
                           <div className="font-semibold text-slate-800">{worker.name}</div>
                           <div className="font-mono text-[10px] text-slate-400">
                             {worker.serialNo} · {worker.passportNo}
                           </div>
                         </td>
+                        <td className="px-3 py-2 text-slate-700">{row.hostCompany}</td>
+                        <td className="px-3 py-2 font-mono text-slate-600">
+                          {row.departureDate}
+                        </td>
                         <td className="px-3 py-2 text-right font-mono text-slate-700">
-                          {formatMoney(amountForFee(worker, feeType), worker.financialConfig.currency || 'JPY')}
+                          {formatMoney(
+                            amountForFee(worker, feeType),
+                            worker.financialConfig.currency || 'JPY'
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -362,31 +565,33 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              {t('invoices.invoiceNo')} *
-            </label>
-            <input
-              type="text"
-              required
-              value={invoiceNo}
-              onChange={(e) => setInvoiceNo(e.target.value)}
-              className={`${inputClass} font-mono`}
-            />
+        {isEdit && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                {t('invoices.invoiceNo')} *
+              </label>
+              <input
+                type="text"
+                required
+                value={invoiceNo}
+                onChange={(e) => setInvoiceNo(e.target.value)}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                {t('invoices.billingPeriod')}
+              </label>
+              <input
+                type="text"
+                value={billingPeriod}
+                onChange={(e) => setBillingPeriod(e.target.value)}
+                className={inputClass}
+              />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              {t('invoices.billingPeriod')}
-            </label>
-            <input
-              type="text"
-              value={billingPeriod}
-              onChange={(e) => setBillingPeriod(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -425,7 +630,8 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
               type="number"
               value={totalAmount}
               onChange={(e) => setTotalAmount(Number(e.target.value))}
-              className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs font-bold focus:border-blue-600 focus:outline-none sm:text-sm"
+              disabled={!isEdit}
+              className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs font-bold focus:border-blue-600 focus:outline-none disabled:bg-slate-100 sm:text-sm"
             />
             {displayCurrency !== currency && currency !== 'USD' && (
               <p className="mt-1 text-[11px] text-slate-500">
@@ -478,10 +684,11 @@ export const InvoiceFormPage: React.FC<InvoiceFormPageProps> = ({
             type="submit"
             disabled={
               saving ||
-              (!isEdit && hostWorkers.length === 0) ||
-              !formal.bankAccountId ||
-              !formal.billedToAttn.trim() ||
-              !formal.subject.trim()
+              (isEdit
+                ? !formal.bankAccountId ||
+                  !formal.billedToAttn.trim() ||
+                  !formal.subject.trim()
+                : !canSubmitCreate)
             }
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-60"
           >

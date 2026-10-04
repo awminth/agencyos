@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { Eye, EyeOff, Sun, Moon, Monitor, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Sun, Moon, Monitor, Lock, Mail, AlertTriangle } from 'lucide-react';
 import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
 import { useLanguage } from '../context/LanguageContext';
@@ -19,6 +19,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const themeIcon =
     preference === 'dark' ? (
@@ -32,6 +33,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setErrorCode(null);
 
     if (!email.trim() || !password.trim()) {
       setErrorMessage(t('login.needFields'));
@@ -41,21 +43,50 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
+      // Allow re-login on the same browser if a matching session token is still stored
+      let existingSessionToken = '';
+      try {
+        const saved =
+          localStorage.getItem('agency_os_user') ||
+          sessionStorage.getItem('agency_os_user');
+        if (saved) {
+          const parsed = JSON.parse(saved) as Partial<AuthUser>;
+          if (
+            parsed.email?.toLowerCase() === email.trim().toLowerCase() &&
+            parsed.sessionToken
+          ) {
+            existingSessionToken = parsed.sessionToken;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           password,
+          sessionToken: existingSessionToken || undefined,
+          deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setErrorMessage(
-          typeof data.error === 'string' ? data.error : t('login.invalid')
-        );
+        const code = typeof data.code === 'string' ? data.code : null;
+        setErrorCode(code);
+        if (code === 'SESSION_ACTIVE') {
+          setErrorMessage(
+            typeof data.error === 'string' ? data.error : t('login.sessionActive')
+          );
+        } else {
+          setErrorMessage(
+            typeof data.error === 'string' ? data.error : t('login.invalid')
+          );
+        }
         return;
       }
 
@@ -64,7 +95,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      onLoginSuccess(data.user as AuthUser, rememberMe);
+      const user = data.user as AuthUser;
+      if (data.sessionToken && !user.sessionToken) {
+        user.sessionToken = data.sessionToken;
+      }
+      onLoginSuccess(user, rememberMe);
     } catch {
       setErrorMessage(t('login.serverError'));
     } finally {
@@ -105,12 +140,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         className="space-y-5 rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)] backdrop-blur-sm sm:p-8 dark:border-slate-700 dark:bg-slate-900/80 dark:shadow-black/40"
       >
         {errorMessage && (
-          <p
-            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300"
+          <div
+            className={`flex gap-3 rounded-xl border px-3.5 py-3 text-sm ${
+              errorCode === 'SESSION_ACTIVE'
+                ? 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100'
+                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300'
+            }`}
             role="alert"
           >
-            {errorMessage}
-          </p>
+            <AlertTriangle
+              className={`mt-0.5 h-5 w-5 shrink-0 ${
+                errorCode === 'SESSION_ACTIVE' ? 'text-amber-600' : 'text-red-500'
+              }`}
+              aria-hidden
+            />
+            <div className="min-w-0 space-y-1">
+              {errorCode === 'SESSION_ACTIVE' && (
+                <p className="text-xs font-bold tracking-wide text-amber-800 uppercase dark:text-amber-300">
+                  {t('login.sessionActiveTitle')}
+                </p>
+              )}
+              <p className="font-semibold leading-relaxed">{errorMessage}</p>
+              {errorCode === 'SESSION_ACTIVE' && (
+                <p className="text-xs font-medium text-amber-800/80 dark:text-amber-200/80">
+                  {t('login.sessionActiveHint')}
+                </p>
+              )}
+            </div>
+          </div>
         )}
 
         <div className="space-y-2">
