@@ -374,26 +374,31 @@ export async function deleteWorker(id: string): Promise<{ deletedInvoices: numbe
   }
 }
 
+/** Trim + collapse internal whitespace so Excel/Settings spacing quirks still match. */
 function normStr(v: unknown): string {
   if (v === null || v === undefined) return '';
-  return String(v).trim();
+  return String(v).replace(/\s+/g, ' ').trim();
+}
+
+function matchKey(value: string): string {
+  return normStr(value).toLowerCase();
 }
 
 function matchSetting(value: string, allowed: Set<string>): boolean {
   if (!value) return false;
   if (allowed.has(value)) return true;
-  const lower = value.toLowerCase();
+  const key = matchKey(value);
   for (const a of allowed) {
-    if (a.toLowerCase() === lower) return true;
+    if (matchKey(a) === key) return true;
   }
   return false;
 }
 
 function resolveSetting(value: string, allowed: Set<string>): string {
   if (allowed.has(value)) return value;
-  const lower = value.toLowerCase();
+  const key = matchKey(value);
   for (const a of allowed) {
-    if (a.toLowerCase() === lower) return a;
+    if (matchKey(a) === key) return a;
   }
   return value;
 }

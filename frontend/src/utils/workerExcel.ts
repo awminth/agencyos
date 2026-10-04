@@ -105,7 +105,7 @@ export function toExcelDateStr(value: unknown): string {
 function cellStr(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return toExcelDateStr(value);
-  return String(value).trim();
+  return String(value).replace(/\s+/g, ' ').trim();
 }
 
 function numOr(value: unknown, fallback: number): number {

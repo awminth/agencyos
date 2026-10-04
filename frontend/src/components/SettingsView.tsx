@@ -10,6 +10,8 @@ import {
   Users as UsersIcon,
   Coins,
   Landmark,
+  Edit,
+  X,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
@@ -106,8 +108,16 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
   const [activeCategory, setActiveCategory] = useState<VariableCategory>('visa_type');
   const [newValue, setNewValue] = useState('');
   const [newParentOrg, setNewParentOrg] = useState('');
+  const [editingVar, setEditingVar] = useState<SystemVariable | null>(null);
+  const [varSaving, setVarSaving] = useState(false);
   const [varMsg, setVarMsg] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const resetVarForm = () => {
+    setNewValue('');
+    setNewParentOrg('');
+    setEditingVar(null);
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -250,32 +260,78 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     total: varTotal,
   } = usePagination(filteredVars, 10);
 
-  const addVariable = async () => {
+  const startEditVariable = (v: SystemVariable) => {
+    setEditingVar(v);
+    setActiveCategory(v.category);
+    setNewValue(v.value);
+    setNewParentOrg(v.parentValue || '');
+    setVarMsg('');
+  };
+
+  const saveVariable = async () => {
     setVarMsg('');
     if (!newValue.trim()) return;
     if (activeCategory === 'host_company' && !newParentOrg.trim()) {
       setVarMsg(t('settings.hostNeedsOrg'));
       return;
     }
+
+    const isEdit = Boolean(editingVar);
+    if (isEdit && !canSettingsUpdate) return;
+    if (!isEdit && !canSettingsCreate) return;
+
+    setVarSaving(true);
     try {
-      const res = await fetch('/api/settings/variables', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category: activeCategory,
-          value: newValue.trim(),
-          parentValue: activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
-          sortOrder: filteredVars.length + 1,
-        }),
-      });
+      const res = await fetch(
+        isEdit ? `/api/settings/variables/${editingVar!.id}` : '/api/settings/variables',
+        {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            isEdit
+              ? {
+                  value: newValue.trim(),
+                  parentValue:
+                    activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
+                }
+              : {
+                  category: activeCategory,
+                  value: newValue.trim(),
+                  parentValue:
+                    activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
+                  sortOrder: filteredVars.length + 1,
+                }
+          ),
+        }
+      );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Create failed');
-      setVariables((prev) => [...prev, data]);
-      setNewValue('');
-      setNewParentOrg('');
-      setVarMsg(t('settings.varAdded'));
+      if (!res.ok) throw new Error(data.error || (isEdit ? 'Update failed' : 'Create failed'));
+
+      if (isEdit) {
+        setVariables((prev) => {
+          let next = prev.map((v) => (v.id === data.id ? data : v));
+          // Supervising org rename also updates host parent_value on the server
+          if (editingVar?.category === 'supervising_org' && editingVar.value !== data.value) {
+            next = next.map((v) =>
+              v.category === 'host_company' && v.parentValue === editingVar.value
+                ? { ...v, parentValue: data.value }
+                : v
+            );
+          }
+          return next;
+        });
+        resetVarForm();
+        setVarMsg(t('settings.varUpdated'));
+        await showSuccess(t('settings.varUpdated'));
+      } else {
+        setVariables((prev) => [...prev, data]);
+        resetVarForm();
+        setVarMsg(t('settings.varAdded'));
+      }
     } catch (err: any) {
-      setVarMsg(err?.message || t('settings.varAddFail'));
+      setVarMsg(err?.message || (isEdit ? t('settings.varUpdateFail') : t('settings.varAddFail')));
+    } finally {
+      setVarSaving(false);
     }
   };
 
@@ -292,6 +348,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
         throw new Error(data.error || 'Delete failed');
       }
       setVariables((prev) => prev.filter((v) => v.id !== id));
+      if (editingVar?.id === id) resetVarForm();
       await showSuccess(t('common.delete'));
     } catch (err: any) {
       setVarMsg(t('settings.varAddFail'));
@@ -677,8 +734,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                 type="button"
                 onClick={() => {
                   setActiveCategory(c.id);
-                  setNewValue('');
-                  setNewParentOrg('');
+                  resetVarForm();
                   setVarMsg('');
                   setVarPage(1);
                 }}
@@ -698,7 +754,8 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
               <select
                 value={newParentOrg}
                 onChange={(e) => setNewParentOrg(e.target.value)}
-                className="min-w-[200px] flex-1 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                disabled={Boolean(editingVar) ? !canSettingsUpdate : !canSettingsCreate}
+                className="min-w-[200px] flex-1 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none disabled:opacity-60"
               >
                 <option value="">— {t('settings.selectOrg')} —</option>
                 {variables
@@ -714,25 +771,63 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
               type="text"
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              placeholder={t('settings.addVariablePlaceholder')}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+              placeholder={
+                editingVar
+                  ? t('settings.editVariablePlaceholder')
+                  : t('settings.addVariablePlaceholder')
+              }
+              disabled={Boolean(editingVar) ? !canSettingsUpdate : !canSettingsCreate}
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none disabled:opacity-60"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  addVariable();
+                  void saveVariable();
+                }
+                if (e.key === 'Escape' && editingVar) {
+                  e.preventDefault();
+                  resetVarForm();
+                  setVarMsg('');
                 }
               }}
             />
             <button
               type="button"
-              onClick={addVariable}
-              disabled={!canSettingsCreate}
+              onClick={() => void saveVariable()}
+              disabled={
+                varSaving ||
+                (editingVar ? !canSettingsUpdate : !canSettingsCreate) ||
+                !newValue.trim()
+              }
               className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-60"
             >
-              <Plus className="h-4 w-4" />
-              {t('settings.addVariable')}
+              {editingVar ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {varSaving
+                ? t('common.loading')
+                : editingVar
+                  ? t('settings.saveVariable')
+                  : t('settings.addVariable')}
             </button>
+            {editingVar && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetVarForm();
+                  setVarMsg('');
+                }}
+                disabled={varSaving}
+                className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <X className="h-4 w-4" />
+                {t('common.cancel')}
+              </button>
+            )}
           </div>
+
+          {editingVar && (
+            <p className="text-[11px] font-medium text-amber-700">
+              {t('settings.editingVariable', { value: editingVar.value })}
+            </p>
+          )}
 
           {varMsg && <p className="text-xs font-semibold text-blue-600">{varMsg}</p>}
 
@@ -744,7 +839,9 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                 {pagedVars.map((v) => (
                   <li
                     key={v.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3.5 text-sm"
+                    className={`flex items-center justify-between gap-3 px-4 py-3.5 text-sm ${
+                      editingVar?.id === v.id ? 'bg-amber-50' : ''
+                    }`}
                   >
                     <span className="min-w-0 flex-1 break-words font-medium text-slate-800">
                       {v.value}
@@ -754,16 +851,28 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                         </span>
                       ) : null}
                     </span>
-                    {canSettingsDelete && (
+                    {(canSettingsUpdate || canSettingsDelete) && (
                       <div className="action-group">
-                        <button
-                          type="button"
-                          onClick={() => removeVariable(v.id)}
-                          className="action-btn action-btn-red"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {canSettingsUpdate && (
+                          <button
+                            type="button"
+                            onClick={() => startEditVariable(v)}
+                            className="action-btn action-btn-blue"
+                            title={t('common.edit')}
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {canSettingsDelete && (
+                          <button
+                            type="button"
+                            onClick={() => removeVariable(v.id)}
+                            className="action-btn action-btn-red"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </li>

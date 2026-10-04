@@ -107,6 +107,10 @@ const VALID_CATEGORIES: VariableCategory[] = [
   'school_name',
 ];
 
+function normalizeVariableText(v: string): string {
+  return v.replace(/\s+/g, ' ').trim();
+}
+
 /** Ensure system_variables.category ENUM includes school_name (existing DBs). */
 export async function ensureSchoolNameCategory(): Promise<void> {
   await pool
@@ -564,12 +568,12 @@ export async function createVariable(input: {
   if (!VALID_CATEGORIES.includes(input.category as VariableCategory)) {
     throw new AppError('Invalid variable category', 400);
   }
-  const value = input.value.trim();
+  const value = normalizeVariableText(input.value);
   if (!value) throw new AppError('Value is required', 400);
 
   let parentValue: string | null = null;
   if (input.category === 'host_company') {
-    parentValue = (input.parentValue || '').trim() || null;
+    parentValue = normalizeVariableText(input.parentValue || '') || null;
     if (!parentValue) {
       throw new AppError('Host Company အတွက် Supervising Org ရွေးပါ။', 400);
     }
@@ -614,6 +618,75 @@ export async function createVariable(input: {
   };
 }
 
+type QueryConn = {
+  execute: typeof pool.execute;
+};
+
+/** Keep worker/student/invoice string refs in sync when a Settings value is renamed. */
+async function cascadeVariableRename(
+  conn: QueryConn,
+  category: VariableCategory,
+  oldValue: string,
+  newValue: string
+): Promise<void> {
+  if (!oldValue || oldValue === newValue) return;
+  const p = { n: newValue, o: oldValue };
+
+  if (category === 'visa_type') {
+    await conn.execute(`UPDATE deployments SET visa_type = :n WHERE visa_type = :o`, p);
+    await conn.execute(
+      `UPDATE student_deployments SET visa_type = :n WHERE visa_type = :o`,
+      p
+    );
+    return;
+  }
+
+  if (category === 'supervising_org') {
+    await conn.execute(
+      `UPDATE deployments SET supervising_org = :n WHERE supervising_org = :o`,
+      p
+    );
+    await conn.execute(
+      `UPDATE invoices SET supervising_org = :n WHERE supervising_org = :o`,
+      p
+    );
+    await conn.execute(
+      `UPDATE system_variables
+       SET parent_value = :n
+       WHERE category = 'host_company' AND parent_value = :o`,
+      p
+    );
+    return;
+  }
+
+  if (category === 'host_company') {
+    await conn.execute(`UPDATE deployments SET host_company = :n WHERE host_company = :o`, p);
+    await conn.execute(`UPDATE invoices SET host_company = :n WHERE host_company = :o`, p);
+    return;
+  }
+
+  if (category === 'job_category') {
+    await conn.execute(`UPDATE deployments SET job_category = :n WHERE job_category = :o`, p);
+    await conn.execute(
+      `UPDATE student_deployments SET job_category = :n WHERE job_category = :o`,
+      p
+    );
+    return;
+  }
+
+  if (category === 'school_name') {
+    // Student school name is stored as student_deployments.supervising_org
+    await conn.execute(
+      `UPDATE student_deployments SET supervising_org = :n WHERE supervising_org = :o`,
+      p
+    );
+    await conn.execute(
+      `UPDATE student_invoices SET school_name = :n WHERE school_name = :o`,
+      p
+    );
+  }
+}
+
 export async function updateVariable(
   id: string,
   input: {
@@ -632,12 +705,16 @@ export async function updateVariable(
   if (!existing) throw new AppError('Variable not found', 404);
 
   const value =
-    input.value !== undefined ? input.value.trim() : existing.value;
+    input.value !== undefined
+      ? normalizeVariableText(input.value)
+      : existing.value;
   if (!value) throw new AppError('Value is required', 400);
 
   let parentValue =
     input.parentValue !== undefined
-      ? input.parentValue?.trim() || null
+      ? input.parentValue
+        ? normalizeVariableText(input.parentValue)
+        : null
       : existing.parent_value;
 
   if (existing.category === 'host_company') {
@@ -662,18 +739,29 @@ export async function updateVariable(
   const isActive =
     input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.is_active;
 
+  const conn = await pool.getConnection();
   try {
-    await pool.execute(
+    await conn.beginTransaction();
+    await conn.execute(
       `UPDATE system_variables
        SET value = :value, parent_value = :parentValue, sort_order = :sortOrder, is_active = :isActive
        WHERE id = :id`,
       { id, value, parentValue, sortOrder, isActive }
     );
+
+    if (existing.value !== value) {
+      await cascadeVariableRename(conn, existing.category, existing.value, value);
+    }
+
+    await conn.commit();
   } catch (err: any) {
+    await conn.rollback();
     if (err?.code === 'ER_DUP_ENTRY') {
       throw new AppError('This value already exists for the category', 409);
     }
     throw err;
+  } finally {
+    conn.release();
   }
 
   return {
