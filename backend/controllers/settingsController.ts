@@ -90,7 +90,13 @@ export async function updateCurrency(req: Request, res: Response): Promise<void>
 export async function listVariables(req: Request, res: Response): Promise<void> {
   const category = typeof req.query.category === 'string' ? req.query.category : undefined;
   const activeOnly = req.query.activeOnly === '1' || req.query.activeOnly === 'true';
-  const variables = await settingsService.listVariables(category, activeOnly);
+  const search =
+    typeof req.query.q === 'string'
+      ? req.query.q
+      : typeof req.query.search === 'string'
+        ? req.query.search
+        : undefined;
+  const variables = await settingsService.listVariables(category, activeOnly, search);
   res.json(variables);
 }
 

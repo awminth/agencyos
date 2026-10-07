@@ -36,7 +36,7 @@ function loadEnvFile(filePath: string): Record<string, string> {
 
 async function count(conn: mysql.Connection, table: string): Promise<number> {
   try {
-    const [rows] = await conn.query<{ c: number }[]>(`SELECT COUNT(*) AS c FROM \`${table}\``);
+    const [rows] = await conn.query<(mysql.RowDataPacket & { c: number })[]>(`SELECT COUNT(*) AS c FROM \`${table}\``);
     return Number((rows as { c: number }[])[0]?.c || 0);
   } catch {
     return -1;

@@ -560,11 +560,12 @@ export async function updateCurrencySettings(input: {
 
 export async function listVariables(
   category?: string,
-  activeOnly = false
+  activeOnly = false,
+  search?: string
 ): Promise<SystemVariable[]> {
   await ensureVariableParentValue();
   let sql = `SELECT id, category, value, parent_value, sort_order, is_active FROM system_variables`;
-  const params: { category?: string } = {};
+  const params: { category?: string; search?: string } = {};
   const where: string[] = [];
 
   if (category && VALID_CATEGORIES.includes(category as VariableCategory)) {
@@ -573,6 +574,10 @@ export async function listVariables(
   }
   if (activeOnly) {
     where.push('is_active = 1');
+  }
+  if (search && search.trim()) {
+    where.push('(value LIKE :search OR parent_value LIKE :search)');
+    params.search = `%${search.trim()}%`;
   }
   if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
   sql += ` ORDER BY category ASC, sort_order ASC, value ASC`;

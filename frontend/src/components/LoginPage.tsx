@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Eye, EyeOff, Sun, Moon, Monitor, Lock, Mail, AlertTriangle } from 'lucide-react';
 import { AuthUser } from '../types';
 import { LoginIllustration } from './LoginIllustration';
@@ -22,9 +22,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const themeIcon =
-    preference === 'dark' ? (
+    (preference as string) === 'dark' ? (
       <Moon className="h-4 w-4" />
-    ) : preference === 'light' ? (
+    ) : (preference as string) === 'light' ? (
       <Sun className="h-4 w-4" />
     ) : (
       <Monitor className="h-4 w-4" />

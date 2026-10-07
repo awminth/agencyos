@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Settings,
   Printer,
@@ -12,6 +12,7 @@ import {
   Landmark,
   Edit,
   X,
+  Search,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCurrency } from '../context/CurrencyContext';
@@ -26,6 +27,8 @@ import { confirmDelete, showError, showSuccess } from '../utils/swal';
 import type { DisplayCurrency } from '../utils/currency';
 import { TablePagination, usePagination } from './TablePagination';
 import { BRAND_LOGO_SRC } from '../utils/brand';
+import { matchesMultilingual } from '../utils/multilingualSearch';
+import { HighlightText } from './HighlightText';
 
 type VariableCategory =
   | 'visa_type'
@@ -109,6 +112,7 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
 
   const [variables, setVariables] = useState<SystemVariable[]>([]);
   const [activeCategory, setActiveCategory] = useState<VariableCategory>('visa_type');
+  const [searchTerm, setSearchTerm] = useState('');
   const [newValue, setNewValue] = useState('');
   const [newParentOrg, setNewParentOrg] = useState('');
   const [editingVar, setEditingVar] = useState<SystemVariable | null>(null);
@@ -261,7 +265,12 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
     }
   };
 
-  const filteredVars = variables.filter((v) => v.category === activeCategory);
+  const filteredVars = useMemo(() => {
+    return variables
+      .filter((v) => v.category === activeCategory)
+      .filter((v) => matchesMultilingual(searchTerm, v));
+  }, [variables, activeCategory, searchTerm]);
+
   const {
     page: varPage,
     setPage: setVarPage,
@@ -306,13 +315,13 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
               ? {
                   value: newValue.trim(),
                   parentValue:
-                    activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
+                    activeCategory === 'host_company' ? newParentOrg.trim() : null,
                 }
               : {
                   category: activeCategory,
                   value: newValue.trim(),
                   parentValue:
-                    activeCategory === 'host_company' ? newParentOrg.trim() : undefined,
+                    activeCategory === 'host_company' ? newParentOrg.trim() : null,
                   sortOrder: filteredVars.length + 1,
                 }
           ),
@@ -887,9 +896,39 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
 
           {varMsg && <p className="text-xs font-semibold text-blue-600">{varMsg}</p>}
 
+          {/* Multilingual Searching Box */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setVarPage(1);
+              }}
+              placeholder={t('settings.searchPlaceholder')}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pr-9 pl-9 text-xs text-slate-900 focus:border-blue-600 focus:outline-none sm:text-sm"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setVarPage(1);
+                }}
+                className="cursor-pointer absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600"
+                title={t('settings.clearSearch')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
           <div className="overflow-hidden rounded-xl border border-slate-200">
             {filteredVars.length === 0 ? (
-              <p className="p-6 text-center text-xs text-slate-400">{t('common.noData')}</p>
+              <p className="p-6 text-center text-xs text-slate-400">
+                {searchTerm.trim() ? t('settings.noSearchMatch') : t('common.noData')}
+              </p>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {pagedVars.map((v) => (
@@ -900,10 +939,10 @@ export const SettingsView: React.FC<{ currentUser: AuthUser }> = ({ currentUser 
                     }`}
                   >
                     <span className="min-w-0 flex-1 break-words font-medium text-slate-800">
-                      {v.value}
+                      <HighlightText text={v.value} query={searchTerm} />
                       {v.parentValue ? (
                         <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
-                          {t('settings.catOrg')}: {v.parentValue}
+                          {t('settings.catOrg')}: <HighlightText text={v.parentValue} query={searchTerm} />
                         </span>
                       ) : null}
                     </span>
