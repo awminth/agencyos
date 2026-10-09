@@ -14,6 +14,7 @@ export const env = {
   dbUser: process.env.DB_USER || 'root',
   dbPassword: process.env.DB_PASSWORD || '',
   dbName: process.env.DB_NAME || 'mt_agencyos',
+  dbSsl: process.env.DB_SSL === 'true' || process.env.DB_SSL === '1',
   corsOrigin: process.env.CORS_ORIGIN || '*',
   nodeEnv: process.env.NODE_ENV || 'development',
   vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),

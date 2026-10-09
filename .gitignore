@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 out/
 .DS_Store
@@ -9,3 +9,4 @@ backend/.env
 frontend/.env
 report.txt
 *.tsbuildinfo
+db-config

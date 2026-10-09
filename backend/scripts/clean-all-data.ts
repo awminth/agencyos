@@ -56,6 +56,7 @@ async function main() {
     password: env.DB_PASSWORD,
     database: env.DB_NAME,
     multipleStatements: true,
+    ssl: (env.DB_SSL || '').toLowerCase() === 'true' ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
   });
 
   const tables = [

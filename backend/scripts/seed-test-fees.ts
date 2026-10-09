@@ -603,6 +603,7 @@ async function main() {
     password: e.DB_PASSWORD ?? process.env.DB_PASSWORD ?? '',
     database: e.DB_NAME || process.env.DB_NAME || 'mt_agencyms',
     multipleStatements: true,
+    ssl: (e.DB_SSL || process.env.DB_SSL || '').toLowerCase() === 'true' ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
   });
 
   console.log('1) Seeding Host Company + School Name system variables…');

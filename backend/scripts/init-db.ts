@@ -33,6 +33,7 @@ const DB_PORT = Number(fileEnv.DB_PORT || process.env.DB_PORT || 3306);
 const DB_USER = fileEnv.DB_USER || process.env.DB_USER || 'root';
 const DB_PASSWORD = fileEnv.DB_PASSWORD ?? process.env.DB_PASSWORD ?? '';
 const DB_NAME = fileEnv.DB_NAME || process.env.DB_NAME || 'mt_agencyms';
+const DB_SSL = (fileEnv.DB_SSL || process.env.DB_SSL || '').toLowerCase() === 'true';
 
 function splitSql(sql: string): string[] {
   return sql
@@ -54,6 +55,7 @@ async function main() {
     user: DB_USER,
     password: DB_PASSWORD,
     multipleStatements: true,
+    ssl: DB_SSL ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
   });
 
   await root.query(
